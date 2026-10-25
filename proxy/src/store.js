@@ -29,6 +29,7 @@ class Store {
     this.listeners = new Set();
     this.resetListeners = new Set();
     this.isBlocked = () => false; // set by server.js (admin block list)
+    this.renamePending = () => false; // set by server.js (admin "ask to rename")
     this.seq = 0;
     this.stream = null;
     this.streamDate = null;
@@ -131,6 +132,7 @@ class Store {
     s.lastSeen = ev.ts;
     s.requests++;
     if (ev.studentId && !s.id) s.id = ev.studentId;
+    if (ev.rawName) s.rawName = ev.rawName;
     if (ev.source !== 'ip') s.source = ev.source;
     if (ev.appName) {
       s.appName = ev.appName;
@@ -217,7 +219,7 @@ class Store {
       const c = `${String(code)[0]}xx`;
       if (classes[c] !== undefined) classes[c] += n;
     }
-    const students = [...this.students.values()].map((s) => ({ ...s, blocked: this.isBlocked(s.name) }));
+    const students = [...this.students.values()].map((s) => ({ ...s, blocked: this.isBlocked(s.name), renamePending: this.renamePending(s.name) }));
     const lb = {
       firstIdorSuccess: this.firstIdorSuccess,
       mostIds: students.filter((s) => s.distinctIds > 0).sort((a, b) => b.distinctIds - a.distinctIds).slice(0, 5).map((s) => ({ student: s.name, value: s.distinctIds })),

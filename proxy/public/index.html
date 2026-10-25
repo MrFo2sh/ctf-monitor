@@ -54,6 +54,11 @@
   button:hover, select:hover { border-color: var(--accent); }
   button.paused { color: var(--notice); border-color: var(--notice); }
   button.danger { color: var(--critical); border-color: var(--critical); }
+  input[type=text], input:not([type]) { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font: inherit; }
+  input:focus { outline: none; border-color: var(--accent); }
+  .search-box { display: inline-flex; align-items: center; gap: 4px; }
+  .search-box input { width: 170px; }
+  #table-search { width: 220px; padding: 2px 8px; font: 11px var(--mono); }
   button.small { padding: 2px 7px; font-size: 11px; }
   #student-actions { display: none; gap: 6px; }
   #student-actions.on { display: flex; }
@@ -201,10 +206,11 @@
     <span><i style="background:var(--high)"></i>IDOR attempt</span>
     <span><i style="background:var(--critical);box-shadow:0 0 6px var(--critical)"></i>IDOR success</span>
   </div>
-  <select id="filter" title="Show one student"><option value="">All students</option></select>
+  <span class="search-box"><input id="filter" list="students-list" placeholder="🔍 student…" autocomplete="off" title="Type to search students; pick one to select"><datalist id="students-list"></datalist><button id="filter-clear" class="small" title="Clear">✕</button></span>
   <div id="student-actions">
     <button id="btn-block" title="Block or unblock the selected student at the proxy">⛔ Block</button>
-    <button id="btn-rename" title="Rename the selected student on the dashboard">✎ Rename</button>
+    <button id="btn-ask-rename" title="Reject this student's name: their browser shows the name page again">🔁 Ask to rename</button>
+    <button id="btn-rename" title="Rename the selected student on the dashboard yourself">✎ Rename</button>
   </div>
   <select id="sort" title="Lane order"><option value="activity">Sort: activity</option><option value="threat">Sort: threat</option><option value="name">Sort: name</option></select>
   <button id="pause">⏸ Pause</button>
@@ -247,7 +253,7 @@
   </aside>
   <div id="table-wrap">
     <h3><span id="table-toggle" style="cursor:pointer">Recent requests <span id="table-hint">▾ collapse</span></span>
-      <span><button class="small" id="table-expand" title="Make this panel taller">⤢ Expand</button> <button class="small" id="table-newtab" title="Open the full request log in a new tab">↗ New tab</button></span></h3>
+      <span><input id="table-search" placeholder="🔍 path, id, status, flag…" autocomplete="off"> <button class="small" id="table-expand" title="Make this panel taller">⤢ Expand</button> <button class="small" id="table-newtab" title="Open the full request log in a new tab">↗ New tab</button></span></h3>
     <table>
       <thead><tr><th>time</th><th>student</th><th>method</th><th>path</th><th>id</th><th>status</th><th>bytes</th><th>ms</th><th>flags</th></tr></thead>
       <tbody id="rows"></tbody>
@@ -260,7 +266,8 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const MAX_DOTS = 70, MAX_ROWS = 80, MAX_ALERT_DOM = 120;
-  const state = { paused: false, buffer: [], filter: '', sort: 'activity', lanes: new Map(), stats: null, alerts: 0 };
+  // filter = exactly selected student (card + actions); query = free text typed in the search box
+  const state = { paused: false, buffer: [], filter: '', query: '', tableQuery: '', sort: 'activity', lanes: new Map(), stats: null, alerts: 0 };
   const laneCounts = new Map(); // name -> {req, high, crit, warn}
   const palette = ['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300','#9085e9','#e66767'];
   const colorFor = (name) => { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0; return palette[h % palette.length]; };
@@ -290,13 +297,22 @@
       </div>
       <div class="lane-body"><div class="track"></div><div class="seq"></div></div>`;
     $('lanes').appendChild(el);
-    el.querySelector('.nm').addEventListener('click', () => { $('filter').value = name; state.filter = name; applyFilter(); });
+    el.querySelector('.nm').addEventListener('click', () => selectStudent(name));
     L = { el, track: el.querySelector('.track'), seq: el.querySelector('.seq'), lastSeen: 0, threat: 0, name };
     state.lanes.set(name, L);
     laneCounts.set(name, { req: 0, high: 0, crit: 0 });
-    if (state.filter && state.filter !== name) el.classList.add('hidden');
+    if (!studentMatches(name)) el.classList.add('hidden');
     addFilterOption(name);
     return L;
+  }
+  function studentMatches(name) {
+    if (state.filter) return name === state.filter;
+    if (state.query) return name.toLowerCase().includes(state.query);
+    return true;
+  }
+  function rowMatches(tr) {
+    if (!studentMatches(tr.dataset.student)) return false;
+    return !state.tableQuery || tr.dataset.text.includes(state.tableQuery);
   }
 
   function addDot(ev, animate) {
@@ -349,8 +365,10 @@
   // ---------- table ----------
   function addRow(ev) {
     const tr = document.createElement('tr');
-    tr.className = sevClass(ev) + (state.filter && state.filter !== ev.student ? ' hidden' : '');
+    tr.className = sevClass(ev);
     tr.dataset.student = ev.student;
+    tr.dataset.text = `${ev.method} ${ev.path} ${ev.objectId ?? ''} ${ev.status} ${ev.flags.join(' ')} ${ev.owner ?? ''} ${ev.student}`.toLowerCase();
+    if (!rowMatches(tr)) tr.classList.add('hidden');
     const s = String(ev.status)[0];
     tr.innerHTML = `<td>${fmtTime(ev.ts)}</td><td>${esc(ev.student)}</td><td>${esc(ev.method)}</td><td title="${esc(ev.path)}">${esc(ev.path)}</td>
       <td>${esc(ev.objectId ?? '')}</td><td><span class="st s${s}">${ev.status}</span></td><td>${ev.size}</td><td>${ev.latencyMs}</td>
@@ -365,7 +383,7 @@
   function addAlert(a, animate) {
     state.alerts++;
     const el = document.createElement('div');
-    el.className = `alert ${a.type}` + (state.filter && state.filter !== a.student ? ' hidden' : '');
+    el.className = `alert ${a.type}` + (studentMatches(a.student) ? '' : ' hidden');
     el.dataset.student = a.student;
     if (!animate) el.style.animation = 'none';
     el.innerHTML = `<div class="ic">${ICON[a.type] || '•'}</div><div><div class="t">${fmtTime(a.ts)} · ${esc(a.type)}</div><div class="m">${esc(a.msg)}</div></div>`;
@@ -453,12 +471,14 @@
       ['IDOR', `${s.idorAttempts} attempts · ${s.idorSuccess} successful`],
       ['distinct IDs', s.distinctIds],
     ];
+    if (s.renamePending) rows.push(['rename', 'requested - waiting for the student']);
+    $('btn-ask-rename').style.display = s.renamePending ? 'none' : '';
     $('sc-grid').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span>`).join('');
     const ips = Object.entries(s.ips || {}).sort((a, b) => b[1].last - a[1].last);
     const mx = Math.max(1, ...ips.map(([, e]) => e.n));
     $('sc-ips').innerHTML = ips.map(([ip, e]) => `<li><span class="w" style="--w:${(e.n / mx) * 100}%" title="first ${fmtTime(e.first || e.last)}">${esc(ip)}</span><span class="n">${e.n} req · ${fmtTime(e.last)}</span></li>`).join('') || '<li><span class="k" style="color:var(--faint)">none yet</span></li>';
   }
-  $('sc-close').addEventListener('click', () => { state.filter = ''; $('filter').value = ''; applyFilter(); });
+  $('sc-close').addEventListener('click', () => { $('filter').value = ''; setStudentQuery(''); });
   async function adminPost(action, body) {
     const r = await fetch('/api/admin/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
@@ -471,12 +491,16 @@
     if (s && s.blocked) { await adminPost('unblock', { student: state.filter }); return; }
     if (confirm(`Block "${state.filter}"?\n\nEvery request from this student (and their IP, unless it is shared) will get "Access blocked" from the proxy. You can unblock at any time.`)) await adminPost('block', { student: state.filter });
   });
+  $('btn-ask-rename').addEventListener('click', async () => {
+    if (!state.filter) return;
+    if (confirm(`Ask "${state.filter}" to enter a different name?\n\nTheir browser will show the name page again, and their other requests are refused until they do. Their history moves to the new name.`)) await adminPost('require-rename', { student: state.filter });
+  });
   $('btn-rename').addEventListener('click', async () => {
     if (!state.filter) return;
     const n = prompt(`New name for "${state.filter}":`, state.filter);
     if (!n || n.trim() === state.filter) return;
     const j = await adminPost('rename', { student: state.filter, newName: n.trim() });
-    if (j.ok) { state.filter = j.name; addFilterOption(j.name); $('filter').value = j.name; }
+    if (j.ok) { addFilterOption(j.name); $('filter').value = j.name; }
   });
   $('table-expand').addEventListener('click', () => {
     const w = $('table-wrap');
@@ -491,16 +515,33 @@
   function addFilterOption(name) {
     if (filterOpts.has(name)) return;
     filterOpts.add(name);
-    const o = document.createElement('option'); o.value = name; o.textContent = name;
-    $('filter').appendChild(o);
+    const o = document.createElement('option'); o.value = name;
+    $('students-list').appendChild(o);
   }
   function applyFilter() {
-    const f = state.filter;
-    for (const L of state.lanes.values()) L.el.classList.toggle('hidden', !!f && f !== L.name);
-    for (const el of document.querySelectorAll('#rows tr, #alerts .alert')) el.classList.toggle('hidden', !!f && f !== el.dataset.student);
+    for (const L of state.lanes.values()) L.el.classList.toggle('hidden', !studentMatches(L.name));
+    for (const el of document.querySelectorAll('#alerts .alert')) el.classList.toggle('hidden', !studentMatches(el.dataset.student));
+    for (const tr of $('rows').children) tr.classList.toggle('hidden', !rowMatches(tr));
     updateActions();
   }
-  $('filter').addEventListener('change', (e) => { state.filter = e.target.value; applyFilter(); });
+  function setStudentQuery(text) {
+    const q = text.trim();
+    const exact = [...state.lanes.keys()].find((n) => n.toLowerCase() === q.toLowerCase());
+    state.filter = exact || '';
+    state.query = exact ? '' : q.toLowerCase();
+    applyFilter();
+  }
+  function selectStudent(name) { $('filter').value = name; setStudentQuery(name); }
+  $('filter').addEventListener('input', (e) => setStudentQuery(e.target.value));
+  $('filter').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { $('filter').value = ''; setStudentQuery(''); }
+    if (e.key === 'Enter') { // first visible student becomes the selection
+      const first = [...state.lanes.values()].find((L) => !L.el.classList.contains('hidden'));
+      if (first) selectStudent(first.name);
+    }
+  });
+  $('filter-clear').addEventListener('click', () => { $('filter').value = ''; setStudentQuery(''); });
+  $('table-search').addEventListener('input', (e) => { state.tableQuery = e.target.value.trim().toLowerCase(); applyFilter(); });
   $('sort').addEventListener('change', (e) => { state.sort = e.target.value; sortLanes(); });
   $('pause').addEventListener('click', () => {
     state.paused = !state.paused;
@@ -551,8 +592,7 @@
     for (const a of s.alerts) addAlert(a, false);
     for (const st of s.stats.students) { lane(st.name, st.source); addFilterOption(st.name); }
     renderStats(s.stats);
-    if (state.filter && !s.stats.students.some((st) => st.name === state.filter)) { state.filter = ''; $('filter').value = ''; }
-    applyFilter();
+    setStudentQuery($('filter').value); // re-resolve the selection (a rename may have changed the name)
   }
   let retry = 1000;
   function connect() {

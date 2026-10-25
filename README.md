@@ -140,12 +140,13 @@ server error, and the busiest endpoints.
 **Leaderboard**: who got the first successful IDOR, who pulled off the most, who enumerated the
 most IDs, who produced the most failed requests.
 
-**Controls** (top right): filter to one student, change the row order, and ⏸ Pause.
+**Controls** (top right): a student search box (type part of a name to narrow the rows, pick a
+name or press Enter to select that student), the row order, and ⏸ Pause.
 While paused nothing moves; press ▶ Resume and everything that happened in between is added.
 
-**Recent requests** (bottom): a plain table of the latest requests. Click its title to collapse,
-⤢ Expand to make it taller, or ↗ New tab to open the full live log in its own browser tab
-(with a search box and a student filter).
+**Recent requests** (bottom): a plain table of the latest requests, with its own search box
+(path, object id, status code, flag or student). Click the title to collapse, ⤢ Expand to make
+it taller, or ↗ New tab to open the full live log in its own browser tab.
 
 **Student card.** Pick a student in the filter box (or click their name on their row). A card
 appears at the top right with how they were identified, their app username and user id, first and
@@ -155,8 +156,12 @@ buttons also appear in the header:
 - ⛔ **Block**: every request from that student (and from their IP, unless several students share
   it) gets an "Access blocked" page from the proxy and never reaches the CTF. Their row dims and
   shows BLOCKED. The same button becomes ✅ **Unblock**.
-- ✎ **Rename**: give the row a better name, for example the real name of someone who typed a
-  joke name. History, alerts and the leaderboard are updated.
+- 🔁 **Ask to rename** (needs the name gate on): rejects the name the student typed. Their next
+  page load shows the name page again with "The organizer asks you to enter your real name", and
+  their other requests get a short "re-enter your name" answer until they do. They cannot re-use
+  the rejected name. When they enter the new one, their row, history and alerts move to it.
+- ✎ **Rename**: rename the row yourself, without involving the student. History, alerts and the
+  leaderboard are updated.
 
 Both are remembered in `logs/admin-state.json`, so they survive a restart.
 

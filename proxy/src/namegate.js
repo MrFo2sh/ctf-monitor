@@ -19,6 +19,19 @@ class NameGate {
     this.secret = this.loadSecret(secretFile);
     // ip -> { names:Set, last:string }  so curl / scripts from the same machine get the browser's name
     this.ipNames = new Map();
+    // names the organizer rejected ("ask to rename"): the student must enter a new one
+    this.revoked = new Map(); // rawName -> ts
+    this.onRename = null; // (oldRawName, newName) => void, set by server.js
+  }
+
+  revoke(rawName) {
+    if (rawName) this.revoked.set(rawName, Date.now());
+  }
+  unrevoke(rawName) {
+    this.revoked.delete(rawName);
+  }
+  isRevoked(rawName) {
+    return this.revoked.has(rawName);
   }
 
   rememberIp(ip, name) {
@@ -121,6 +134,11 @@ class NameGate {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
           return res.end(this.page(next, 'Please enter a name (2-32 letters or numbers).'));
         }
+        if (this.revoked.has(name)) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          return res.end(this.page(next, 'That name was not accepted by the organizer. Please enter your real name.'));
+        }
+        const prev = this.nameFrom(req); // the cookie they had before (if any)
         const value = encodeURIComponent(`${name}.${this.sign(name)}`);
         res.writeHead(302, {
           Location: next,
@@ -129,12 +147,30 @@ class NameGate {
         });
         res.end();
         this.rememberIp(clientIp(req), name);
-        log('info', `name gate: new student "${name}" (ip ${clientIp(req)})`);
+        if (prev && prev !== name && this.revoked.has(prev)) {
+          this.revoked.delete(prev);
+          log('info', `name gate: "${prev}" renamed themselves to "${name}"`);
+          if (this.onRename) this.onRename(prev, name);
+        } else log('info', `name gate: new student "${name}" (ip ${clientIp(req)})`);
       });
       return true;
     }
 
-    if (this.nameFrom(req) || !this.isNavigation(req)) return false;
+    const current = this.nameFrom(req);
+    if (current && this.revoked.has(current)) {
+      // organizer asked this student to rename: browser gets the page again, everything else a short refusal
+      if (this.isNavigation(req)) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(this.page(req.url || '/', 'The organizer asks you to enter your real name before continuing.'));
+      } else {
+        const msg = 'ctf-watch: the organizer asks you to re-enter your name. Open the CTF in your browser, then retry.';
+        const wantsJson = String(req.headers.accept || '').includes('json');
+        res.writeHead(428, { 'Content-Type': wantsJson ? 'application/json' : 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(wantsJson ? JSON.stringify({ error: msg }) : msg + '\n');
+      }
+      return true;
+    }
+    if (current || !this.isNavigation(req)) return false;
 
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(this.page(req.url || '/'));

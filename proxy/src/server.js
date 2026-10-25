@@ -35,6 +35,7 @@ const detector = new Detector(getConfig);
 const store = new Store({ logDir: LOG_DIR, demo: DEMO });
 const admin = new Admin({ file: path.join(LOG_DIR, 'admin-state.json'), store, detector, gate });
 store.isBlocked = (name) => !!admin.state.blocked[name];
+store.renamePending = (name) => admin.isRenamePending(name);
 
 const withAlias = (who) => {
   const name = admin.alias(who.name);
@@ -111,6 +112,7 @@ function onEvent(x) {
     ts: x.ts,
     time: new Date(x.ts).toISOString(),
     student: who.name,
+    rawName: who.rawName || who.name,
     studentId: who.id,
     source: who.source,
     appName: who.appName || undefined,

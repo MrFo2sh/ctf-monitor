@@ -64,6 +64,7 @@ function createDashboard({ port, store, admin, getRawConfig }) {
           return json(res, 200, { ok: true });
         }
         if (url === '/api/admin/rename') return json(res, 200, { ok: true, name: admin.rename(body.student, String(body.newName || '')) });
+        if (url === '/api/admin/require-rename') return json(res, 200, { ok: true, ...admin.requireRename(body.student) });
       } catch (err) {
         return json(res, 400, { error: err.message });
       }

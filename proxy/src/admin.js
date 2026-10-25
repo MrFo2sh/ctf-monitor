@@ -13,8 +13,9 @@ class Admin {
     this.store = store;
     this.detector = detector;
     this.gate = gate;
-    this.state = { blocked: {}, aliases: {} };
+    this.state = { blocked: {}, aliases: {}, revoked: {} };
     this.load();
+    if (this.gate) this.gate.onRename = (oldRaw, newName) => this.onGateRename(oldRaw, newName);
   }
 
   load() {
@@ -23,12 +24,50 @@ class Admin {
         const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
         this.state.blocked = raw.blocked && typeof raw.blocked === 'object' ? raw.blocked : {};
         this.state.aliases = raw.aliases && typeof raw.aliases === 'object' ? raw.aliases : {};
+        this.state.revoked = raw.revoked && typeof raw.revoked === 'object' ? raw.revoked : {};
+        if (this.gate) for (const r of Object.keys(this.state.revoked)) this.gate.revoke(r);
         const n = Object.keys(this.state.blocked).length;
         if (n) log('info', `admin: ${n} blocked student(s) loaded`);
       }
     } catch (err) {
       log('error', `admin state could not be read: ${err.message}`);
     }
+  }
+
+  // raw identity name (what the proxy sees in the cookie) behind a dashboard name
+  rawNameFor(displayName) {
+    for (const [raw, al] of Object.entries(this.state.aliases)) if (al === displayName) return raw;
+    const s = this.store.students.get(displayName);
+    return (s && s.rawName) || displayName;
+  }
+
+  // "Ask to rename": the student's current name is rejected; the name page comes back in their browser.
+  requireRename(displayName) {
+    if (!this.gate) throw new Error('the name gate is off (set NAME_GATE=1 in .env)');
+    const raw = this.rawNameFor(displayName);
+    this.gate.revoke(raw);
+    this.state.revoked[raw] = Date.now();
+    this.save();
+    log('info', `admin: asked ${displayName} to rename`);
+    return { name: displayName };
+  }
+
+  isRenamePending(displayName) {
+    return !!this.state.revoked[this.rawNameFor(displayName)];
+  }
+
+  // the student entered a new name after being asked: carry their history over
+  onGateRename(oldRaw, newName) {
+    const oldDisplay = this.alias(oldRaw);
+    delete this.state.aliases[oldRaw];
+    delete this.state.revoked[oldRaw];
+    if (this.state.blocked[oldDisplay]) {
+      this.state.blocked[newName] = this.state.blocked[oldDisplay];
+      delete this.state.blocked[oldDisplay];
+    }
+    this.save();
+    this.store.renameStudent(oldDisplay, newName);
+    this.detector.renameStudent(oldDisplay, newName);
   }
 
   save() {
@@ -103,6 +142,7 @@ class Admin {
     return {
       blocked: Object.entries(this.state.blocked).map(([name, b]) => ({ name, ip: b.ip, ts: b.ts })),
       aliases: this.state.aliases,
+      renamePending: Object.keys(this.state.revoked).map((raw) => this.alias(raw)),
     };
   }
 }
