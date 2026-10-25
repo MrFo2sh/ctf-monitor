@@ -1,0 +1,74 @@
+{
+  "_help": [
+    "This is the ONE file that controls detection. Edit it and save - the monitor reloads it live, no restart needed.",
+    "Patterns are JavaScript regular expressions written as JSON strings, so a backslash is doubled: \\d means a digit.",
+    "(?<id>...) captures the object ID. Rules are tried top to bottom; the first match wins.",
+    "Run ./inspect.sh on the CTF VM to learn the real cookie names, endpoints and ID formats, then adjust below."
+  ],
+
+  "identity": {
+    "_help": "How to work out WHICH STUDENT sent a request. Tried in this order: JWT, session cookie (learned at login), X-Forwarded-For / IP.",
+    "jwt": {
+      "cookies": ["token", "jwt", "auth", "access_token", "authToken"],
+      "headers": ["authorization"],
+      "nameClaims": ["username", "user", "name", "email", "login", "preferred_username", "user.username", "user.name"],
+      "idClaims": ["id", "userId", "user_id", "uid", "sub", "user.id"]
+    },
+    "sessionCookies": ["session", "connect.sid", "PHPSESSID", "sessionid", "sid", "JSESSIONID", "laravel_session", "ctf_session"],
+    "login": {
+      "_help": "When a login succeeds, remember 'this session cookie = this username'. The password is never stored.",
+      "methods": ["POST"],
+      "pathPattern": "^/(api/)?(auth/)?(login|signin|session)s?$",
+      "userFields": ["username", "email", "user", "login", "name"],
+      "responseIdFields": ["id", "userId", "user_id", "user.id"],
+      "responseNameFields": ["username", "user.username", "name", "email"]
+    },
+    "whoami": {
+      "_help": "Endpoints that return the current user. Used to learn the student's name and their own user ID.",
+      "pathPattern": "^/(api/)?(me|profile|whoami|user/me|users/me)$",
+      "idFields": ["id", "userId", "user_id", "user.id"],
+      "nameFields": ["username", "user.username", "name", "email"]
+    }
+  },
+
+  "endpoints": {
+    "_help": [
+      "The IDOR targets. Each entry: name, (optional) methods, pattern, idFrom, owner.",
+      "idFrom:  'path' (default, uses (?<id>...) in pattern) | 'query:<param>' | 'body:<field>'",
+      "owner:   'auto' (default) = ownership.json, then 'it is their own user id', then learn from first quiet success",
+      "         'same-as-user' = the object ID must equal the student's own user ID (profile pages)",
+      "         'map'          = only trust config/ownership.json",
+      "         'learn'        = the first student to quietly read it owns it",
+      "         'none'         = only track the IDs (enumeration), no ownership check"
+    ],
+    "list": [
+      { "name": "user profile", "pattern": "^/api/users/(?<id>[^/?]+)", "owner": "auto" },
+      { "name": "orders",       "pattern": "^/api/orders/(?<id>[^/?]+)", "owner": "auto" },
+      { "name": "invoice",      "pattern": "^/api/invoices?$", "idFrom": "query:id", "owner": "auto" },
+      { "name": "messages",     "pattern": "^/api/messages/(?<id>[^/?]+)", "owner": "auto" },
+      { "name": "generic numeric id", "pattern": "^/(?!static|assets|public)[^?]*/(?<id>\\d{2,})(/|$)", "owner": "learn" }
+    ]
+  },
+
+  "ownership": {
+    "_help": "Optional fixed map of who owns what: config/ownership.json. Set learnFromFirstSuccess=false to only trust that file + same-as-user.",
+    "file": "ownership.json",
+    "learnFromFirstSuccess": true
+  },
+
+  "thresholds": {
+    "enumeration": { "_help": "N different IDs on the same endpoint within W seconds", "distinctIds": 5, "windowSeconds": 30 },
+    "bruteForce":  { "_help": "N responses with one of these statuses within W seconds", "errors": 15, "windowSeconds": 20, "statuses": [401, 403, 404, 429] },
+    "successMinBytes": { "_help": "A 2xx with at least this many body bytes counts as 'contains data'", "value": 2 }
+  },
+
+  "masking": {
+    "_help": "Any field or URL parameter whose name CONTAINS one of these words is replaced by *** in logs and on the dashboard.",
+    "fields": ["password", "passwd", "pass", "pwd", "token", "secret", "otp", "csrf", "authorization", "apikey", "api_key", "credit", "card", "cvv"]
+  },
+
+  "ignore": {
+    "_help": "Requests matching these are forwarded normally but NOT shown or logged (static files, health checks).",
+    "pathPatterns": ["\\.(css|js|map|png|jpe?g|gif|svg|ico|webp|woff2?|ttf)$", "^/favicon", "^/health$"]
+  }
+}

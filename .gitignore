@@ -1,0 +1,16 @@
+# runtime logs (can get big) - never commit
+logs/*
+!logs/.gitkeep
+
+# local settings
+.env
+inspect-report.txt
+
+# dependencies
+node_modules/
+npm-debug.log*
+
+# editors / OS
+.DS_Store
+.vscode/
+.idea/

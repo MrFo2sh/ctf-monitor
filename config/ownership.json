@@ -1,0 +1,4 @@
+{
+  "_help": "Optional. Who owns which object ID. Keys are endpoint names from rules.json, or '*' for every endpoint. Leave empty to let the monitor learn.",
+  "*": {}
+}
