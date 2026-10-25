@@ -7,17 +7,40 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { parseCookies, log } = require('./util');
+const { parseCookies, clientIp, log } = require('./util');
 
 const GATE_PATH = '/__ctfwatch/name';
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 class NameGate {
-  constructor({ secretFile, cookie, title, strict }) {
+  constructor({ secretFile, cookie, title }) {
     this.cookie = cookie || 'ctfw_name';
     this.title = title || 'Welcome to the CTF';
-    this.strict = !!strict; // strict: block EVERY request without a valid name cookie (not just page loads)
     this.secret = this.loadSecret(secretFile);
+    // ip -> { names:Set, last:string }  so curl / scripts from the same machine get the browser's name
+    this.ipNames = new Map();
+  }
+
+  rememberIp(ip, name) {
+    if (!ip || !name) return;
+    let e = this.ipNames.get(ip);
+    if (!e) {
+      e = { names: new Set(), last: name };
+      this.ipNames.set(ip, e);
+      if (this.ipNames.size > 5000) this.ipNames.delete(this.ipNames.keys().next().value);
+    }
+    if (!e.names.has(name)) {
+      e.names.add(name);
+      if (e.names.size === 2) log('info', `name gate: ip ${ip} is shared by ${[...e.names].join(', ')} - no longer matching that ip to a name`);
+    }
+    e.last = name;
+  }
+
+  // Name to use for a cookie-less request from this ip, or null when unknown / shared by several students.
+  nameForIp(ip) {
+    const e = ip && this.ipNames.get(ip);
+    if (!e || e.names.size !== 1) return null;
+    return e.last;
   }
 
   loadSecret(file) {
@@ -105,25 +128,16 @@ class NameGate {
           'Cache-Control': 'no-store',
         });
         res.end();
-        log('info', `name gate: new student "${name}"`);
+        this.rememberIp(clientIp(req), name);
+        log('info', `name gate: new student "${name}" (ip ${clientIp(req)})`);
       });
       return true;
     }
 
-    if (this.nameFrom(req)) return false;
+    if (this.nameFrom(req) || !this.isNavigation(req)) return false;
 
-    if (this.isNavigation(req)) {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(this.page(req.url || '/'));
-      return true;
-    }
-    if (!this.strict) return false;
-
-    // strict mode: API calls, form posts, scripts... without the name cookie are refused by the proxy
-    const msg = 'ctf-watch: open the CTF in your browser and enter your name first (then retry; tools must send the ctfw_name cookie)';
-    const wantsJson = String(req.headers.accept || '').includes('json') || String(req.headers['content-type'] || '').includes('json');
-    res.writeHead(428, { 'Content-Type': wantsJson ? 'application/json' : 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(wantsJson ? JSON.stringify({ error: msg }) : msg + '\n');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(this.page(req.url || '/'));
     return true;
   }
 

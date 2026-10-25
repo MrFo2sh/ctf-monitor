@@ -16,8 +16,15 @@ class IdentityResolver {
     // 0. Name typed by the student on the name-gate page (if enabled) wins for the display name;
     //    the app identity still supplies the user ID when it has one.
     if (this.gate) {
+      const appName = base.source === 'ip' ? null : base.name;
       const name = this.gate.nameFrom(req);
-      if (name) return { ...base, name, source: 'name', appName: base.source === 'ip' ? null : base.name };
+      if (name) {
+        this.gate.rememberIp(base.ip, name);
+        return { ...base, name, source: 'name', appName };
+      }
+      // no cookie (curl, scripts, Burp without cookies): same machine as a browser that gave a name?
+      const ipName = this.gate.nameForIp(base.ip);
+      if (ipName) return { ...base, name: ipName, source: 'ip-match', appName };
     }
     return base;
   }
