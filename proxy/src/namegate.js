@@ -22,6 +22,7 @@ class NameGate {
     // names the organizer rejected ("ask to rename"): the student must enter a new one
     this.revoked = new Map(); // rawName -> ts
     this.onRename = null; // (oldRawName, newName) => void, set by server.js
+    this.onIpNamed = null; // (ip, name) => void: an ip got its (single) name -> merge the "ip:<ip>" row
   }
 
   revoke(rawName) {
@@ -45,6 +46,7 @@ class NameGate {
     if (!e.names.has(name)) {
       e.names.add(name);
       if (e.names.size === 2) log('info', `name gate: ip ${ip} is shared by ${[...e.names].join(', ')} - no longer matching that ip to a name`);
+      if (e.names.size === 1 && this.onIpNamed) this.onIpNamed(ip, name);
     }
     e.last = name;
   }

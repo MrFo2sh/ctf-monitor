@@ -42,6 +42,17 @@ const withAlias = (who) => {
   return name === who.name ? who : { ...who, name, rawName: who.name };
 };
 
+// An anonymous row ("ip:1.2.3.4" or "sess-ab12cd34") just got identified: fold it into the student's row.
+function mergeLane(anonLabel, rawName) {
+  const target = admin.alias(rawName);
+  if (!anonLabel || anonLabel === target || !store.students.has(anonLabel)) return;
+  store.renameStudent(anonLabel, target);
+  detector.renameStudent(anonLabel, target);
+  log('info', `merged row ${anonLabel} into ${target}`);
+}
+if (gate) gate.onIpNamed = (ip, name) => mergeLane(`ip:${ip}`, name);
+identity.onSessionNamed = (label, name) => mergeLane(label, name);
+
 // Runs before forwarding. Blocked students get a 403 from the proxy and never reach the CTF.
 function preRequest(req, res) {
   const who = withAlias(identity.resolve(req));

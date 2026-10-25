@@ -9,6 +9,7 @@ class IdentityResolver {
     this.getConfig = getConfig;
     this.gate = gate || null; // optional NameGate
     this.sessions = new Map(); // session cookie value -> { name, id }
+    this.onSessionNamed = null; // (anonLabel, name) => void: a "sess-xxxx" row got identified -> merge it
   }
 
   resolve(req) {
@@ -111,7 +112,10 @@ class IdentityResolver {
     if (!entry.name) return;
     const changed = prev.name !== entry.name || prev.id !== entry.id;
     this.sessions.set(sessionKey, entry);
-    if (changed) log('info', `identity learned: session ${shortHash(sessionKey)} -> ${entry.name}${entry.id ? ` (id ${entry.id})` : ''}`);
+    if (changed) {
+      log('info', `identity learned: session ${shortHash(sessionKey)} -> ${entry.name}${entry.id ? ` (id ${entry.id})` : ''}`);
+      if (this.onSessionNamed && prev.name !== entry.name) this.onSessionNamed(`sess-${shortHash(sessionKey)}`, entry.name);
+    }
     // keep the map bounded
     if (this.sessions.size > 5000) {
       const first = this.sessions.keys().next().value;

@@ -206,6 +206,10 @@ Only normal browser page loads are asked. Scripts, `curl`, Burp and the app's ow
 never blocked, so the CTF keeps working for all tools. A student who clears cookies is simply asked
 again.
 
+Rows are merged automatically: if someone first shows up as `ip:1.2.3.4` (curl before the
+browser) or `sess-ab12cd34` (before logging in) and is identified later, that anonymous row and
+its requests are folded into the student's row.
+
 Requests that arrive without the name cookie, for example from `curl` or a script, are still
 matched to a student when they come from the same IP address as a browser that already gave a
 name. Those show on the dashboard with the source `ip-match`. If two different students enter
