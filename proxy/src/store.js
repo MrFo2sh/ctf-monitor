@@ -228,6 +228,7 @@ class Store {
     };
     return {
       demo: this.demo,
+      startedAt: this.startedAt,
       uptimeSec: Math.round((Date.now() - this.startedAt) / 1000),
       total: this.total,
       rps: last60,

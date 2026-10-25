@@ -65,6 +65,8 @@
   .slist li.sel { background: rgba(57,135,229,.18); outline: 1px solid var(--accent); }
   .slist li.hidden { display: none; }
   .slist li .av { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .slist li .nm::after { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); margin-left: 6px; vertical-align: 1px; }
+  .slist li.online .nm::after { background: var(--good); box-shadow: 0 0 4px var(--good); }
   .slist li .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .slist li.blk .nm { color: var(--critical); text-decoration: line-through; }
   .slist li .meta { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
@@ -225,7 +227,7 @@
   <section id="lanes"><div class="empty" id="empty">Waiting for traffic…<br><br>Send students to the proxy port, or run <code>./start.sh --demo</code> to see it in action.</div></section>
   <aside>
     <div class="panel" id="students-panel">
-      <h3>Students <span id="students-count"></span></h3>
+      <h3>Students <span id="students-count" title="green dot = active in the last 2 minutes"></span></h3>
       <span class="search-box"><input id="filter" list="students-list" placeholder="🔍 search student…" autocomplete="off" title="Type to search; click a student to select"><datalist id="students-list"></datalist><button id="filter-clear" class="small" title="Clear">✕</button></span>
       <ul class="slist" id="slist"></ul>
     </div>
@@ -465,7 +467,8 @@
   function renderStudentList(students) {
     const ul = $('slist');
     const sorted = students.slice().sort((a, b) => a.name.localeCompare(b.name));
-    $('students-count').textContent = `${students.length}`;
+    const online = students.filter((s) => Date.now() - s.lastSeen < 120000).length;
+    $('students-count').textContent = `${online} online · ${students.length} total`;
     const seen = new Set();
     sorted.forEach((s, i) => {
       seen.add(s.name);
@@ -480,6 +483,7 @@
       }
       li.querySelector('.meta').innerHTML = `${s.requests} req${s.idorAttempts ? ` · ${s.idorAttempts} ⚠` : ''}${s.idorSuccess ? ` · <span class="c">${s.idorSuccess} 🚨</span>` : ''}${s.renamePending ? ' · 🔁' : ''}`;
       li.classList.toggle('blk', !!s.blocked);
+      li.classList.toggle('online', Date.now() - s.lastSeen < 120000); // active in the last 2 minutes
       li.classList.toggle('sel', state.filter === s.name);
       li.classList.toggle('hidden', !studentMatches(s.name));
       if (ul.children[i] !== li) ul.insertBefore(li, ul.children[i] || null);
@@ -629,6 +633,9 @@
     else if (m.type === 'stats') renderStats(m.stats);
   }
   function loadSnapshot(s) {
+    // the monitor was restarted (probably updated): load the fresh page instead of keeping the old one
+    if (state.serverStart && s.stats.startedAt && s.stats.startedAt !== state.serverStart) { location.reload(); return; }
+    state.serverStart = s.stats.startedAt;
     $('lanes').querySelectorAll('.lane').forEach((e) => e.remove());
     state.lanes.clear(); laneCounts.clear(); state.alerts = 0;
     $('rows').innerHTML = ''; $('alerts').innerHTML = '';
