@@ -8,9 +8,18 @@ elif command -v docker-compose >/dev/null 2>&1; then COMPOSE="docker-compose"
 else echo "Docker Compose not found"; exit 1; fi
 
 if ! docker info >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then exec sudo -E "$0" "$@"; fi
+[ -f .env ] && { set -a; . ./.env; set +a; }
+
+# stop the zrok share we started
+if [ -f logs/zrok.pid ]; then
+  PID="$(cat logs/zrok.pid)"
+  if kill -0 "$PID" 2>/dev/null; then kill "$PID" 2>/dev/null || sudo kill "$PID" 2>/dev/null || true; echo "zrok share stopped."; fi
+  rm -f logs/zrok.pid
+fi
+pkill -f "zrok share .*:${PROXY_PORT:-8888}" 2>/dev/null || true
 
 $COMPOSE --profile demo down --remove-orphans
 echo
 echo "ctf-watch stopped. Logs are still in ./logs/"
-echo "Remember: if zrok is still pointing at the proxy port, students can no longer reach the CTF."
-echo "Either start ctf-watch again (./start.sh) or point zrok back at the CTF port."
+echo "The zrok share is stopped too, so students cannot reach the CTF until you run ./start.sh again"
+echo "(or share the CTF port directly:  zrok share public <ctf-port>)."

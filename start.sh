@@ -84,7 +84,54 @@ for _ in $(seq 1 30); do
 done
 [ "$ok" = "1" ] || { warn "Dashboard did not answer yet. Logs:"; $COMPOSE logs --tail=30 monitor; exit 1; }
 
-# ---------------------------------------------------------------- 4. done
+# ---------------------------------------------------------------- 4. zrok
+ZROK_URL=""
+ZROK_NOTE=""
+if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
+  # zrok is set up for the normal user; if we were re-run with sudo, run zrok as that user
+  ZROK_AS=()
+  if [ -n "${SUDO_USER:-}" ] && [ "$(id -u)" -eq 0 ]; then ZROK_AS=(sudo -u "$SUDO_USER" -H); fi
+  ZROK_BIN="$(command -v zrok 2>/dev/null || true)"
+  [ -z "$ZROK_BIN" ] && [ -n "${SUDO_USER:-}" ] && ZROK_BIN="$(sudo -u "$SUDO_USER" -i sh -c 'command -v zrok' 2>/dev/null || true)"
+
+  if [ -z "$ZROK_BIN" ]; then
+    ZROK_NOTE="zrok was not found. Start it yourself:   zrok share public http://127.0.0.1:$PROXY_PORT"
+  else
+    # an older share (ours, or the one that points straight at the CTF) must stop first
+    if pgrep -f 'zrok share' >/dev/null 2>&1; then
+      echo "A zrok share is already running:"
+      pgrep -af 'zrok share' | sed 's/^/     /'
+      yn="Y"
+      if [ -t 0 ]; then read -r -p "Stop it and share the proxy port instead? [Y/n]: " yn; yn="${yn:-Y}"; fi
+      case "$yn" in
+        n|N) ZROK_NOTE="Left the old zrok share running. Students still go straight to the CTF, NOT through the monitor." ;;
+        *) pkill -f 'zrok share' || true; sleep 2 ;;
+      esac
+    fi
+    if [ -z "$ZROK_NOTE" ]; then
+      if [ -n "${ZROK_RESERVED:-}" ]; then
+        ZROK_CMD=("$ZROK_BIN" share reserved --headless --override-endpoint "http://127.0.0.1:$PROXY_PORT" "$ZROK_RESERVED")
+      else
+        ZROK_CMD=("$ZROK_BIN" share public --headless "http://127.0.0.1:$PROXY_PORT")
+      fi
+      say "Starting zrok: ${ZROK_CMD[*]}"
+      : > logs/zrok.log
+      nohup ${ZROK_AS[@]+"${ZROK_AS[@]}"} "${ZROK_CMD[@]}" >> logs/zrok.log 2>&1 &
+      echo $! > logs/zrok.pid
+      for _ in $(seq 1 25); do
+        ZROK_URL="$(grep -oE 'https://[A-Za-z0-9._-]+\.[A-Za-z0-9._-]*zrok[A-Za-z0-9./_-]*' logs/zrok.log 2>/dev/null | head -1 || true)"
+        [ -n "$ZROK_URL" ] && break
+        if ! kill -0 "$(cat logs/zrok.pid)" 2>/dev/null; then break; fi
+        sleep 1
+      done
+      if [ -z "$ZROK_URL" ]; then
+        ZROK_NOTE="zrok started but no URL was seen yet. Check:  tail -f logs/zrok.log   (if it failed, run:  zrok share public http://127.0.0.1:$PROXY_PORT)"
+      fi
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------- 5. done
 echo
 printf '\033[1;32m  ctf-watch is running.\033[0m\n'
 echo
@@ -96,13 +143,14 @@ echo
 if [ "$DEMO" = "1" ]; then
   echo "  Fake students are now playing. Open the dashboard and watch."
   echo "  Stop with:  ./stop.sh"
+elif [ -n "$ZROK_URL" ]; then
+  printf '  \033[1;32mGIVE THIS LINK TO THE STUDENTS:\033[0m\n\n      %s\n\n' "$ZROK_URL"
+  echo "  zrok is running in the background (log: logs/zrok.log). ./stop.sh stops it together with the monitor."
+elif [ -n "$ZROK_NOTE" ]; then
+  warn "$ZROK_NOTE"
 else
-  echo "  NOW POINT ZROK AT THE PROXY (not at the CTF port):"
-  echo
+  echo "  zrok auto-start is off (ZROK_AUTO=0). Point zrok at the proxy yourself:"
   echo "      zrok share public http://127.0.0.1:$PROXY_PORT"
-  echo
-  echo "  (If you use a reserved share:  zrok reserve public http://127.0.0.1:$PROXY_PORT   then   zrok share reserved <name>)"
-  echo "  Stop the old zrok share that pointed at the CTF port first (Ctrl+C in its terminal)."
 fi
 echo
 echo "  If the VM has no browser, from your laptop run:  ssh -L $DASHBOARD_PORT:127.0.0.1:$DASHBOARD_PORT <user>@<vm-ip>"

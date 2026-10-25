@@ -38,31 +38,35 @@ something like:
   ctf-watch is running.
 
   Dashboard (this machine only):  http://127.0.0.1:8080
-  Proxy for students:             http://127.0.0.1:8888  ->  http://127.0.0.1:3000
+  Proxy for students:             http://127.0.0.1:8888  ->  http://127.0.0.1:5000
 
-  NOW POINT ZROK AT THE PROXY (not at the CTF port):
+  GIVE THIS LINK TO THE STUDENTS:
 
-      zrok share public http://127.0.0.1:8888
+      https://abcd1234.share.zrok.io
 ```
 
 If the script says it cannot talk to Docker, run it with `sudo ./start.sh`.
 
-## 3. Point zrok at the proxy (important)
+## 3. zrok
 
-Right now zrok sends students straight to the CTF app port. Change it to the **proxy port**
-(8888 by default), so the traffic goes through the monitor:
+You do not need to run zrok yourself. `start.sh` starts the share for you, pointing at the
+proxy port, and prints the link to give to the students. It runs in the background and
+`./stop.sh` stops it.
 
-1. Stop the old zrok share (press `Ctrl+C` in the terminal where it runs).
-2. Start it again with the proxy port:
-   ```bash
-   zrok share public http://127.0.0.1:8888
-   ```
-   If you use a reserved (fixed) share name:
-   ```bash
-   zrok reserve public http://127.0.0.1:8888      # once
-   zrok share reserved <your-share-name>          # every time
-   ```
-3. Give the students the zrok link as usual. They will not notice any difference.
+If a zrok share is already running when you start (for example the old one that pointed straight
+at the CTF), the script shows it and asks whether to stop it. Say yes: students must go through
+the proxy, otherwise the dashboard sees nothing.
+
+Two settings in `.env`, if you need them:
+
+- `ZROK_RESERVED=<name>` if you have a reserved share with a fixed link. The script then uses that
+  name and the link stays the same every time.
+- `ZROK_AUTO=0` if you prefer to run zrok yourself. Then run:
+  ```bash
+  zrok share public http://127.0.0.1:8888
+  ```
+
+Students will not notice any difference. Everything they do is the same as before.
 
 ## 4. Open the dashboard
 
@@ -85,8 +89,8 @@ then open http://127.0.0.1:8080 on the laptop.
 ./stop.sh
 ```
 
-After stopping, point zrok back at the CTF port (or start CTF Watch again), otherwise the
-students cannot reach the CTF.
+This also stops the zrok share, so students cannot reach the CTF until you run `./start.sh` again
+(or share the CTF port directly with `zrok share public <ctf-port>`).
 
 ## 6. Try it first (demo mode)
 
