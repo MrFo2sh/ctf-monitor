@@ -23,10 +23,11 @@ h "Listening ports on the VM (ss -ltnp)"
 ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null || echo "(ss/netstat not available)"
 
 h "zrok"
-command -v zrok >/dev/null && zrok version 2>&1 | head -3 || echo "zrok binary not in PATH for this user"
+for z in zrok2 zrok; do command -v "$z" >/dev/null 2>&1 && { echo "$z: $(command -v "$z")"; "$z" version 2>&1 | head -3; }; done
+command -v zrok2 >/dev/null 2>&1 || command -v zrok >/dev/null 2>&1 || echo "zrok2 / zrok binary not in PATH for this user"
 echo; echo "zrok processes (shows which URL/port zrok currently shares):"
-pgrep -af zrok || echo "(no zrok process running right now)"
-echo; ls -la ~/.zrok 2>/dev/null | head || true
+pgrep -af 'zrok2? ' || echo "(no zrok process running right now)"
+echo; ls -la ~/.zrok ~/.zrok2 2>/dev/null | head || true
 
 for c in $(docker ps --format '{{.Names}}' | grep -v '^ctf-watch'); do
   h "Container: $c"

@@ -91,29 +91,45 @@ if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
   # zrok is set up for the normal user; if we were re-run with sudo, run zrok as that user
   ZROK_AS=()
   if [ -n "${SUDO_USER:-}" ] && [ "$(id -u)" -eq 0 ]; then ZROK_AS=(sudo -u "$SUDO_USER" -H); fi
-  ZROK_BIN="$(command -v zrok 2>/dev/null || true)"
-  [ -z "$ZROK_BIN" ] && [ -n "${SUDO_USER:-}" ] && ZROK_BIN="$(sudo -u "$SUDO_USER" -i sh -c 'command -v zrok' 2>/dev/null || true)"
+  # zrok2 (new) is preferred over zrok (old); ZROK_BIN in .env overrides
+  ZROK_BIN="${ZROK_BIN:-}"
+  for cand in zrok2 zrok; do
+    [ -n "$ZROK_BIN" ] && break
+    ZROK_BIN="$(command -v "$cand" 2>/dev/null || true)"
+    [ -z "$ZROK_BIN" ] && [ -n "${SUDO_USER:-}" ] && ZROK_BIN="$(sudo -u "$SUDO_USER" -i sh -c "command -v $cand" 2>/dev/null || true)"
+  done
 
   if [ -z "$ZROK_BIN" ]; then
-    ZROK_NOTE="zrok was not found. Start it yourself:   zrok share public http://127.0.0.1:$PROXY_PORT"
+    ZROK_NOTE="zrok was not found. Start it yourself:   zrok2 share public $PROXY_PORT"
   else
     # an older share (ours, or the one that points straight at the CTF) must stop first
-    if pgrep -f 'zrok share' >/dev/null 2>&1; then
+    if pgrep -f 'zrok2? share' >/dev/null 2>&1; then
       echo "A zrok share is already running:"
-      pgrep -af 'zrok share' | sed 's/^/     /'
+      pgrep -af 'zrok2? share' | sed 's/^/     /'
       yn="Y"
       if [ -t 0 ]; then read -r -p "Stop it and share the proxy port instead? [Y/n]: " yn; yn="${yn:-Y}"; fi
       case "$yn" in
         n|N) ZROK_NOTE="Left the old zrok share running. Students still go straight to the CTF, NOT through the monitor." ;;
-        *) pkill -f 'zrok share' || true; sleep 2 ;;
+        *) pkill -f 'zrok2? share' || true; sleep 2 ;;
       esac
     fi
     if [ -z "$ZROK_NOTE" ]; then
-      if [ -n "${ZROK_RESERVED:-}" ]; then
-        ZROK_CMD=("$ZROK_BIN" share reserved --headless --override-endpoint "http://127.0.0.1:$PROXY_PORT" "$ZROK_RESERVED")
-      else
-        ZROK_CMD=("$ZROK_BIN" share public --headless "http://127.0.0.1:$PROXY_PORT")
-      fi
+      case "$(basename "$ZROK_BIN")" in
+        zrok2)
+          # zrok 2:  zrok2 share public --headless <port>     fixed name:  -n public:<name>  (after: zrok2 create name <name>)
+          if [ -n "${ZROK_RESERVED:-}" ]; then
+            ZROK_CMD=("$ZROK_BIN" share public --headless -n "public:${ZROK_RESERVED#public:}" "$PROXY_PORT")
+          else
+            ZROK_CMD=("$ZROK_BIN" share public --headless "$PROXY_PORT")
+          fi ;;
+        *)
+          # zrok 1:  zrok share public --headless http://127.0.0.1:<port>     reserved:  zrok share reserved <name>
+          if [ -n "${ZROK_RESERVED:-}" ]; then
+            ZROK_CMD=("$ZROK_BIN" share reserved --headless --override-endpoint "http://127.0.0.1:$PROXY_PORT" "$ZROK_RESERVED")
+          else
+            ZROK_CMD=("$ZROK_BIN" share public --headless "http://127.0.0.1:$PROXY_PORT")
+          fi ;;
+      esac
       say "Starting zrok: ${ZROK_CMD[*]}"
       : > logs/zrok.log
       nohup ${ZROK_AS[@]+"${ZROK_AS[@]}"} "${ZROK_CMD[@]}" >> logs/zrok.log 2>&1 &
@@ -125,7 +141,7 @@ if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
         sleep 1
       done
       if [ -z "$ZROK_URL" ]; then
-        ZROK_NOTE="zrok started but no URL was seen yet. Check:  tail -f logs/zrok.log   (if it failed, run:  zrok share public http://127.0.0.1:$PROXY_PORT)"
+        ZROK_NOTE="zrok started but no URL was seen yet. Check:  tail -f logs/zrok.log   (if it failed, run:  $(basename "$ZROK_BIN") share public $PROXY_PORT)"
       fi
     fi
   fi
@@ -150,7 +166,7 @@ elif [ -n "$ZROK_NOTE" ]; then
   warn "$ZROK_NOTE"
 else
   echo "  zrok auto-start is off (ZROK_AUTO=0). Point zrok at the proxy yourself:"
-  echo "      zrok share public http://127.0.0.1:$PROXY_PORT"
+  echo "      zrok2 share public $PROXY_PORT        (old zrok:  zrok share public http://127.0.0.1:$PROXY_PORT)"
 fi
 echo
 echo "  If the VM has no browser, from your laptop run:  ssh -L $DASHBOARD_PORT:127.0.0.1:$DASHBOARD_PORT <user>@<vm-ip>"

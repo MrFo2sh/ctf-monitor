@@ -16,7 +16,7 @@ if [ -f logs/zrok.pid ]; then
   if kill -0 "$PID" 2>/dev/null; then kill "$PID" 2>/dev/null || sudo kill "$PID" 2>/dev/null || true; echo "zrok share stopped."; fi
   rm -f logs/zrok.pid
 fi
-pkill -f "zrok share .*:${PROXY_PORT:-8888}" 2>/dev/null || true
+pkill -f "zrok2? share .*${PROXY_PORT:-8888}" 2>/dev/null || true
 
 $COMPOSE --profile demo down --remove-orphans
 echo

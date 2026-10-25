@@ -49,9 +49,13 @@ If the script says it cannot talk to Docker, run it with `sudo ./start.sh`.
 
 ## 3. zrok
 
-You do not need to run zrok yourself. `start.sh` starts the share for you, pointing at the
-proxy port, and prints the link to give to the students. It runs in the background and
-`./stop.sh` stops it.
+You do not need to run zrok yourself. `start.sh` finds `zrok2` (or the older `zrok`), starts
+the share for you pointing at the proxy port, and prints the link to give to the students. It runs
+in the background and `./stop.sh` stops it. The command it runs is simply:
+
+```bash
+zrok2 share public --headless 8888
+```
 
 If a zrok share is already running when you start (for example the old one that pointed straight
 at the CTF), the script shows it and asks whether to stop it. Say yes: students must go through
@@ -59,11 +63,11 @@ the proxy, otherwise the dashboard sees nothing.
 
 Two settings in `.env`, if you need them:
 
-- `ZROK_RESERVED=<name>` if you have a reserved share with a fixed link. The script then uses that
-  name and the link stays the same every time.
+- `ZROK_RESERVED=<name>` to keep the same link every time. With zrok2, create the name once with
+  `zrok2 create name <name>`; the script then shares as `public:<name>`.
 - `ZROK_AUTO=0` if you prefer to run zrok yourself. Then run:
   ```bash
-  zrok share public http://127.0.0.1:8888
+  zrok2 share public 8888
   ```
 
 Students will not notice any difference. Everything they do is the same as before.
@@ -90,7 +94,7 @@ then open http://127.0.0.1:8080 on the laptop.
 ```
 
 This also stops the zrok share, so students cannot reach the CTF until you run `./start.sh` again
-(or share the CTF port directly with `zrok share public <ctf-port>`).
+(or share the CTF port directly with `zrok2 share public <ctf-port>`).
 
 ## 6. Try it first (demo mode)
 
