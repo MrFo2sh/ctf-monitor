@@ -150,8 +150,13 @@ if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
       nohup ${ZROK_AS[@]+"${ZROK_AS[@]}"} "${ZROK_CMD[@]}" >> logs/zrok.log 2>&1 &
       echo $! > logs/zrok.pid
       for _ in $(seq 1 45); do
-        ZROK_URL="$(grep -oE 'https?://[A-Za-z0-9._-]+(:[0-9]+)?[A-Za-z0-9./_-]*' logs/zrok.log 2>/dev/null | grep -v '127.0.0.1' | grep -v 'localhost' | head -1 || true)"
-        [ -n "$ZROK_URL" ] && break
+        # zrok2 logs e.g. "...endpoints:\n rvajwqvbc62o.shares.zrok.io" (no scheme); zrok 1 prints a full https:// URL
+        ZROK_URL="$(grep -oE '(https?://)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.zrok\.io[A-Za-z0-9./_-]*' logs/zrok.log 2>/dev/null | head -1 || true)"
+        [ -z "$ZROK_URL" ] && ZROK_URL="$(grep -oE 'https?://[A-Za-z0-9._-]+(:[0-9]+)?[A-Za-z0-9./_-]*' logs/zrok.log 2>/dev/null | grep -v '127.0.0.1' | grep -v 'localhost' | head -1 || true)"
+        if [ -n "$ZROK_URL" ]; then
+          case "$ZROK_URL" in http://*|https://*) ;; *) ZROK_URL="https://$ZROK_URL" ;; esac
+          break
+        fi
         if ! kill -0 "$(cat logs/zrok.pid)" 2>/dev/null; then break; fi
         sleep 1
       done
