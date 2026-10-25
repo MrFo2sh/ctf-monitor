@@ -117,8 +117,15 @@ if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
   if [ -z "$ZROK_BIN" ]; then
     ZROK_NOTE="zrok was not found. Start it yourself:   zrok2 share public $PROXY_PORT"
   else
+    # our own share from a previous ./start.sh still running? keep it (same link for the students)
+    if [ -f logs/zrok.pid ] && kill -0 "$(cat logs/zrok.pid)" 2>/dev/null && pgrep -af 'zrok2? share' | grep -q "[: ]$PROXY_PORT\b"; then
+      ZROK_URL="$(grep -oE '(https?://)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.zrok\.io[A-Za-z0-9./_-]*' logs/zrok.log 2>/dev/null | head -1 || true)"
+      case "$ZROK_URL" in ''|http://*|https://*) ;; *) ZROK_URL="https://$ZROK_URL" ;; esac
+      ZROK_NOTE="${ZROK_URL:+keep}"
+      [ -z "$ZROK_URL" ] && ZROK_NOTE="The zrok share from the previous start is still running (see logs/zrok.log for the link)."
+      say "zrok share already running for port $PROXY_PORT - keeping it"
     # an older share (ours, or the one that points straight at the CTF) must stop first
-    if pgrep -f 'zrok2? share' >/dev/null 2>&1; then
+    elif pgrep -f 'zrok2? share' >/dev/null 2>&1; then
       echo "A zrok share is already running:"
       pgrep -af 'zrok2? share' | sed 's/^/     /'
       yn="Y"
@@ -128,7 +135,9 @@ if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
         *) pkill -f 'zrok2? share' || true; sleep 2 ;;
       esac
     fi
-    if [ -z "$ZROK_NOTE" ]; then
+    if [ "$ZROK_NOTE" = "keep" ]; then
+      ZROK_NOTE=""
+    elif [ -z "$ZROK_NOTE" ]; then
       case "$(basename "$ZROK_BIN")" in
         zrok2)
           # zrok 2:  zrok2 share public --headless <port>     fixed name:  -n public:<name>  (after: zrok2 create name <name>)

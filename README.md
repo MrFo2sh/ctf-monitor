@@ -171,7 +171,13 @@ turn on the **name gate**. Edit `.env`:
 NAME_GATE=1
 ```
 
-and run `./start.sh` again. The first time a student opens the CTF link in a browser they see a
+and apply it without touching the zrok link:
+
+```bash
+sudo docker compose up -d monitor
+```
+
+The first time a student opens the CTF link in a browser they see a
 small page: "Before you start, tell us who you are." After typing a name they land on the CTF as
 normal and never see the page again (the name is kept in a cookie for 30 days). On the dashboard
 that name is used for the student's row, with the app username shown next to it.
