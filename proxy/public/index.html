@@ -31,9 +31,10 @@
   body { background: var(--bg); color: var(--text); font: 13px/1.45 var(--sans); overflow: hidden; }
   a { color: var(--accent); }
 
+  body { display: flex; flex-direction: column; }
   header {
-    height: 56px; display: flex; align-items: center; gap: 14px; padding: 0 16px;
-    border-bottom: 1px solid var(--border); background: var(--panel);
+    min-height: 56px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 6px 16px;
+    border-bottom: 1px solid var(--border); background: var(--panel); flex: none;
   }
   header .brand { font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: 13px; display: flex; align-items: center; gap: 8px; }
   header .brand .live { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
@@ -56,8 +57,19 @@
   button.danger { color: var(--critical); border-color: var(--critical); }
   input[type=text], input:not([type]) { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font: inherit; }
   input:focus { outline: none; border-color: var(--accent); }
-  .search-box { display: inline-flex; align-items: center; gap: 4px; }
-  .search-box input { width: 170px; }
+  .search-box { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+  .search-box input { flex: 1; min-width: 0; }
+  .slist { list-style: none; margin: 0; padding: 0; max-height: 170px; overflow-y: auto; }
+  .slist li { display: flex; align-items: center; gap: 7px; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .slist li:hover { background: var(--panel); }
+  .slist li.sel { background: rgba(57,135,229,.18); outline: 1px solid var(--accent); }
+  .slist li.hidden { display: none; }
+  .slist li .av { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .slist li .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slist li.blk .nm { color: var(--critical); text-decoration: line-through; }
+  .slist li .meta { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .slist li .meta .c { color: var(--critical); }
+  #student-actions { margin: 4px 0 8px; flex-wrap: wrap; }
   #table-search { width: 220px; padding: 2px 8px; font: 11px var(--mono); }
   button.small { padding: 2px 7px; font-size: 11px; }
   #student-actions { display: none; gap: 6px; }
@@ -77,7 +89,7 @@
   .sc-grid .v { font-family: var(--mono); }
   #sc-ips li .w { font-family: var(--mono); user-select: all; }
 
-  main { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: 1fr auto; height: calc(100% - 56px); }
+  main { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: 1fr auto; flex: 1; min-height: 0; }
   #lanes { overflow-y: auto; padding: 10px 12px; grid-row: 1; grid-column: 1; }
   aside { grid-row: 1 / span 2; grid-column: 2; border-left: 1px solid var(--border); overflow-y: auto; background: var(--panel-2); display: flex; flex-direction: column; }
   #table-wrap { grid-row: 2; grid-column: 1; border-top: 1px solid var(--border); background: var(--panel); height: 190px; overflow: auto; }
@@ -180,13 +192,12 @@
   @keyframes pulse-high { 0% { box-shadow: 0 0 0 0 rgba(236,131,90,.8); } 100% { box-shadow: 0 0 0 9px rgba(236,131,90,0); } }
   @keyframes pulse-crit { 0% { box-shadow: 0 0 0 0 rgba(208,59,59,.9); } 100% { box-shadow: 0 0 0 12px rgba(208,59,59,0); } }
 
+  @media (max-width: 1300px) { header .legend { display: none; } }
   @media (max-width: 1000px) {
-    body { overflow: auto; }
+    body { overflow: auto; display: block; }
     main { grid-template-columns: 1fr; height: auto; }
     aside { grid-row: auto; grid-column: 1; border-left: 0; border-top: 1px solid var(--border); }
     #table-wrap { grid-column: 1; }
-    header { height: auto; flex-wrap: wrap; padding: 8px 16px; }
-    header .legend { display: none; }
     .lane { grid-template-columns: 1fr; }
   }
 </style>
@@ -206,12 +217,6 @@
     <span><i style="background:var(--high)"></i>IDOR attempt</span>
     <span><i style="background:var(--critical);box-shadow:0 0 6px var(--critical)"></i>IDOR success</span>
   </div>
-  <span class="search-box"><input id="filter" list="students-list" placeholder="🔍 student…" autocomplete="off" title="Type to search students; pick one to select"><datalist id="students-list"></datalist><button id="filter-clear" class="small" title="Clear">✕</button></span>
-  <div id="student-actions">
-    <button id="btn-block" title="Block or unblock the selected student at the proxy">⛔ Block</button>
-    <button id="btn-ask-rename" title="Reject this student's name: their browser shows the name page again">🔁 Ask to rename</button>
-    <button id="btn-rename" title="Rename the selected student on the dashboard yourself">✎ Rename</button>
-  </div>
   <select id="sort" title="Lane order"><option value="activity">Sort: activity</option><option value="threat">Sort: threat</option><option value="name">Sort: name</option></select>
   <button id="pause">⏸ Pause</button>
 </header>
@@ -219,9 +224,19 @@
 <main>
   <section id="lanes"><div class="empty" id="empty">Waiting for traffic…<br><br>Send students to the proxy port, or run <code>./start.sh --demo</code> to see it in action.</div></section>
   <aside>
+    <div class="panel" id="students-panel">
+      <h3>Students <span id="students-count"></span></h3>
+      <span class="search-box"><input id="filter" list="students-list" placeholder="🔍 search student…" autocomplete="off" title="Type to search; click a student to select"><datalist id="students-list"></datalist><button id="filter-clear" class="small" title="Clear">✕</button></span>
+      <ul class="slist" id="slist"></ul>
+    </div>
     <div class="panel" id="student-card" style="display:none">
       <h3>Selected student <span id="sc-close" style="cursor:pointer">✕ clear</span></h3>
       <div class="sc-name"><span class="av" id="sc-av"></span><b id="sc-nm"></b> <span class="badge" id="sc-blocked" style="display:none;color:var(--critical);border-color:var(--critical)">BLOCKED</span></div>
+      <div id="student-actions">
+        <button class="small" id="btn-block" title="Block or unblock this student at the proxy">⛔ Block</button>
+        <button class="small" id="btn-ask-rename" title="Reject this student's name: their browser shows the name page again">🔁 Ask to rename</button>
+        <button class="small" id="btn-rename" title="Rename this student on the dashboard yourself">✎ Rename</button>
+      </div>
       <div class="sc-grid" id="sc-grid"></div>
       <h4 style="margin:10px 0 4px;font-size:11px;color:var(--faint)">IP addresses</h4>
       <ul class="list" id="sc-ips"></ul>
@@ -440,8 +455,36 @@
       L.el.querySelector('.src').textContent = s.source + (s.appName ? ' · app user ' + s.appName : '') + (s.id ? ' · id ' + s.id : '');
       L.el.classList.toggle('blocked', !!s.blocked);
     }
+    renderStudentList(st.students);
     updateActions();
     sortLanes();
+  }
+
+  // ---------- student list (sidebar) ----------
+  const listItems = new Map();
+  function renderStudentList(students) {
+    const ul = $('slist');
+    const sorted = students.slice().sort((a, b) => a.name.localeCompare(b.name));
+    $('students-count').textContent = `${students.length}`;
+    const seen = new Set();
+    sorted.forEach((s, i) => {
+      seen.add(s.name);
+      let li = listItems.get(s.name);
+      if (!li) {
+        li = document.createElement('li');
+        li.dataset.name = s.name;
+        li.innerHTML = `<span class="av" style="background:${colorFor(s.name)}"></span><span class="nm">${esc(s.name)}</span><span class="meta"></span>`;
+        li.addEventListener('click', () => selectStudent(s.name));
+        listItems.set(s.name, li);
+        addFilterOption(s.name);
+      }
+      li.querySelector('.meta').innerHTML = `${s.requests} req${s.idorAttempts ? ` · ${s.idorAttempts} ⚠` : ''}${s.idorSuccess ? ` · <span class="c">${s.idorSuccess} 🚨</span>` : ''}${s.renamePending ? ' · 🔁' : ''}`;
+      li.classList.toggle('blk', !!s.blocked);
+      li.classList.toggle('sel', state.filter === s.name);
+      li.classList.toggle('hidden', !studentMatches(s.name));
+      if (ul.children[i] !== li) ul.insertBefore(li, ul.children[i] || null);
+    });
+    for (const [name, li] of listItems) if (!seen.has(name)) { li.remove(); listItems.delete(name); }
   }
 
   // ---------- organizer actions (block / unblock / rename) ----------
@@ -520,13 +563,14 @@
   }
   function applyFilter() {
     for (const L of state.lanes.values()) L.el.classList.toggle('hidden', !studentMatches(L.name));
+    for (const [name, li] of listItems) { li.classList.toggle('hidden', !studentMatches(name)); li.classList.toggle('sel', state.filter === name); }
     for (const el of document.querySelectorAll('#alerts .alert')) el.classList.toggle('hidden', !studentMatches(el.dataset.student));
     for (const tr of $('rows').children) tr.classList.toggle('hidden', !rowMatches(tr));
     updateActions();
   }
   function setStudentQuery(text) {
     const q = text.trim();
-    const exact = [...state.lanes.keys()].find((n) => n.toLowerCase() === q.toLowerCase());
+    const exact = [...listItems.keys(), ...state.lanes.keys()].find((n) => n.toLowerCase() === q.toLowerCase());
     state.filter = exact || '';
     state.query = exact ? '' : q.toLowerCase();
     applyFilter();
@@ -535,9 +579,9 @@
   $('filter').addEventListener('input', (e) => setStudentQuery(e.target.value));
   $('filter').addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { $('filter').value = ''; setStudentQuery(''); }
-    if (e.key === 'Enter') { // first visible student becomes the selection
-      const first = [...state.lanes.values()].find((L) => !L.el.classList.contains('hidden'));
-      if (first) selectStudent(first.name);
+    if (e.key === 'Enter') { // first visible student in the list becomes the selection
+      const first = [...listItems.entries()].find(([, li]) => !li.classList.contains('hidden'));
+      if (first) selectStudent(first[0]);
     }
   });
   $('filter-clear').addEventListener('click', () => { $('filter').value = ''; setStudentQuery(''); });

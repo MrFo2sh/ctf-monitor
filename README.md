@@ -140,18 +140,20 @@ server error, and the busiest endpoints.
 **Leaderboard**: who got the first successful IDOR, who pulled off the most, who enumerated the
 most IDs, who produced the most failed requests.
 
-**Controls** (top right): a student search box (type part of a name to narrow the rows, pick a
-name or press Enter to select that student), the row order, and ⏸ Pause.
-While paused nothing moves; press ▶ Resume and everything that happened in between is added.
+**Controls** (top right): the row order and ⏸ Pause. While paused nothing moves; press
+▶ Resume and everything that happened in between is added.
+
+**Students** (top of the right column): the list of everyone seen, with a search box. Typing
+narrows the list and the rows; clicking a student selects them.
 
 **Recent requests** (bottom): a plain table of the latest requests, with its own search box
 (path, object id, status code, flag or student). Click the title to collapse, ⤢ Expand to make
 it taller, or ↗ New tab to open the full live log in its own browser tab.
 
-**Student card.** Pick a student in the filter box (or click their name on their row). A card
-appears at the top right with how they were identified, their app username and user id, first and
-last seen, request counts, and every **IP address** they have used (with request counts). Two
-buttons also appear in the header:
+**Student card.** Click a student in the list (or their name on their row). A card appears under
+the list with how they were identified, their app username and user id, first and last seen,
+request counts, and every **IP address** they have used (with request counts). The card has three
+buttons:
 
 - ⛔ **Block**: every request from that student (and from their IP, unless several students share
   it) gets an "Access blocked" page from the proxy and never reaches the CTF. Their row dims and
