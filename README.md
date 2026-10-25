@@ -186,6 +186,19 @@ Only normal browser page loads are asked. Scripts, `curl`, Burp and the app's ow
 never blocked, so the CTF keeps working for all tools. A student who clears cookies is simply asked
 again.
 
+That also means a student can get around the page: by staying on a CTF page that was open before
+you enabled it (no new page load), or by using `curl` or a script without the browser cookie.
+If you want everyone named, no exceptions, add to `.env`:
+
+```
+NAME_GATE_STRICT=1
+```
+
+and apply with `sudo docker compose up -d monitor`. Now every request without a name cookie is
+refused with a short message telling the student to open the CTF in the browser and enter a name.
+Burp still works (it sends the browser's cookies). `curl` and scripts must send the `ctfw_name`
+cookie copied from the browser's developer tools.
+
 ## Changing the detection rules
 
 Everything lives in one file: **`config/rules.json`**. It is commented inside. You can change:

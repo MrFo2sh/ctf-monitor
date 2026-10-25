@@ -22,7 +22,15 @@ const NAME_GATE = /^(1|true|yes)$/i.test(String(process.env.NAME_GATE || ''));
 
 const config = new Config();
 const getConfig = () => config.get();
-const gate = NAME_GATE ? new NameGate({ secretFile: path.join(LOG_DIR, '.name-gate-secret'), cookie: process.env.NAME_GATE_COOKIE || 'ctfw_name', title: process.env.NAME_GATE_TITLE || 'Welcome to the CTF' }) : null;
+const NAME_GATE_STRICT = /^(1|true|yes)$/i.test(String(process.env.NAME_GATE_STRICT || ''));
+const gate = NAME_GATE
+  ? new NameGate({
+      secretFile: path.join(LOG_DIR, '.name-gate-secret'),
+      cookie: process.env.NAME_GATE_COOKIE || 'ctfw_name',
+      title: process.env.NAME_GATE_TITLE || 'Welcome to the CTF',
+      strict: NAME_GATE_STRICT,
+    })
+  : null;
 const identity = new IdentityResolver(getConfig, gate);
 const detector = new Detector(getConfig);
 const store = new Store({ logDir: LOG_DIR, demo: DEMO });
@@ -95,7 +103,7 @@ const shouldIgnore = (pathOnly) => getConfig().compiledIgnore.some((re) => re.te
 createProxy({ target: CTF_TARGET, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate });
 createDashboard({ port: DASHBOARD_PORT, store, getRawConfig: () => config.raw });
 
-log('info', `ctf-watch started${DEMO ? ' (DEMO MODE)' : ''}${NAME_GATE ? ' (name gate ON)' : ''}. target=${CTF_TARGET} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=127.0.0.1:${DASHBOARD_PORT}`);
+log('info', `ctf-watch started${DEMO ? ' (DEMO MODE)' : ''}${NAME_GATE ? ` (name gate ON${NAME_GATE_STRICT ? ', strict' : ''})` : ''}. target=${CTF_TARGET} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=127.0.0.1:${DASHBOARD_PORT}`);
 
 process.on('SIGTERM', () => {
   log('info', 'shutting down');

@@ -13,9 +13,10 @@ const GATE_PATH = '/__ctfwatch/name';
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 class NameGate {
-  constructor({ secretFile, cookie, title }) {
+  constructor({ secretFile, cookie, title, strict }) {
     this.cookie = cookie || 'ctfw_name';
     this.title = title || 'Welcome to the CTF';
+    this.strict = !!strict; // strict: block EVERY request without a valid name cookie (not just page loads)
     this.secret = this.loadSecret(secretFile);
   }
 
@@ -109,10 +110,20 @@ class NameGate {
       return true;
     }
 
-    if (this.nameFrom(req) || !this.isNavigation(req)) return false;
+    if (this.nameFrom(req)) return false;
 
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(this.page(req.url || '/'));
+    if (this.isNavigation(req)) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(this.page(req.url || '/'));
+      return true;
+    }
+    if (!this.strict) return false;
+
+    // strict mode: API calls, form posts, scripts... without the name cookie are refused by the proxy
+    const msg = 'ctf-watch: open the CTF in your browser and enter your name first (then retry; tools must send the ctfw_name cookie)';
+    const wantsJson = String(req.headers.accept || '').includes('json') || String(req.headers['content-type'] || '').includes('json');
+    res.writeHead(428, { 'Content-Type': wantsJson ? 'application/json' : 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(wantsJson ? JSON.stringify({ error: msg }) : msg + '\n');
     return true;
   }
 
