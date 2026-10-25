@@ -149,14 +149,19 @@ if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
       : > logs/zrok.log
       nohup ${ZROK_AS[@]+"${ZROK_AS[@]}"} "${ZROK_CMD[@]}" >> logs/zrok.log 2>&1 &
       echo $! > logs/zrok.pid
-      for _ in $(seq 1 25); do
-        ZROK_URL="$(grep -oE 'https://[A-Za-z0-9._-]+\.[A-Za-z0-9._-]*zrok[A-Za-z0-9./_-]*' logs/zrok.log 2>/dev/null | head -1 || true)"
+      for _ in $(seq 1 45); do
+        ZROK_URL="$(grep -oE 'https?://[A-Za-z0-9._-]+(:[0-9]+)?[A-Za-z0-9./_-]*' logs/zrok.log 2>/dev/null | grep -v '127.0.0.1' | grep -v 'localhost' | head -1 || true)"
         [ -n "$ZROK_URL" ] && break
         if ! kill -0 "$(cat logs/zrok.pid)" 2>/dev/null; then break; fi
         sleep 1
       done
       if [ -z "$ZROK_URL" ]; then
-        ZROK_NOTE="zrok started but no URL was seen yet. Check:  tail -f logs/zrok.log   (if it failed, run:  $(basename "$ZROK_BIN") share public $PROXY_PORT)"
+        if kill -0 "$(cat logs/zrok.pid)" 2>/dev/null; then
+          ZROK_NOTE="zrok is running but printed no link yet. Last lines of logs/zrok.log:"
+        else
+          ZROK_NOTE="zrok exited. Last lines of logs/zrok.log:"
+        fi
+        ZROK_NOTE="$ZROK_NOTE"$'\n'"$(tail -n 15 logs/zrok.log | sed 's/^/     | /')"$'\n'"  Try it by hand to see the link:  $(basename "$ZROK_BIN") share public $PROXY_PORT"
       fi
     fi
   fi
