@@ -22,6 +22,15 @@ class Detector {
     return st;
   }
 
+  renameStudent(oldName, newName) {
+    const st = this.students.get(oldName);
+    if (st) {
+      this.students.delete(oldName);
+      if (!this.students.has(newName)) this.students.set(newName, st);
+    }
+    for (const m of this.learned.values()) for (const [id, owner] of m) if (owner === oldName) m.set(id, newName);
+  }
+
   matchEndpoint(method, pathOnly, url, reqBody) {
     const cfg = this.getConfig();
     for (const ep of cfg.compiledEndpoints) {

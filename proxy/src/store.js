@@ -27,6 +27,8 @@ class Store {
     this.rps = new Array(RPS_WINDOW).fill(0);
     this.rpsHead = Math.floor(Date.now() / 1000);
     this.listeners = new Set();
+    this.resetListeners = new Set();
+    this.isBlocked = () => false; // set by server.js (admin block list)
     this.seq = 0;
     this.stream = null;
     this.streamDate = null;
@@ -37,6 +39,44 @@ class Store {
   onEvent(fn) {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
+  }
+  onReset(fn) {
+    this.resetListeners.add(fn);
+  }
+
+  // Admin rename: rewrite history so the dashboard shows one lane under the new name.
+  renameStudent(oldName, newName) {
+    if (!oldName || !newName || oldName === newName) return;
+    for (const ev of this.events) if (ev.student === oldName) ev.student = newName;
+    for (const a of this.alerts) {
+      if (a.student === oldName) a.student = newName;
+      a.msg = a.msg.split(oldName).join(newName);
+    }
+    const s = this.students.get(oldName);
+    if (s) {
+      this.students.delete(oldName);
+      const t = this.students.get(newName);
+      if (t) {
+        for (const k of ['requests', 'failed', 'flagged', 'idorAttempts', 'idorSuccess', 'enumeration', 'bursts']) t[k] += s[k];
+        t.distinctIds = Math.max(t.distinctIds, s.distinctIds);
+        t.firstSeen = Math.min(t.firstSeen, s.firstSeen);
+        t.lastSeen = Math.max(t.lastSeen, s.lastSeen);
+        if (s.firstIdorSuccessTs && (!t.firstIdorSuccessTs || s.firstIdorSuccessTs < t.firstIdorSuccessTs)) t.firstIdorSuccessTs = s.firstIdorSuccessTs;
+        Object.assign(t.seq, s.seq);
+        for (const [ip, e] of Object.entries(s.ips)) {
+          if (t.ips[ip]) {
+            t.ips[ip].n += e.n;
+            t.ips[ip].last = Math.max(t.ips[ip].last, e.last);
+          } else t.ips[ip] = e;
+        }
+        for (const a of s.appNames) if (!t.appNames.includes(a)) t.appNames.push(a);
+      } else {
+        s.name = newName;
+        this.students.set(newName, s);
+      }
+    }
+    if (this.firstIdorSuccess && this.firstIdorSuccess.student === oldName) this.firstIdorSuccess.student = newName;
+    for (const l of this.resetListeners) l();
   }
 
   student(ev) {
@@ -59,10 +99,21 @@ class Store {
         distinctIds: 0,
         firstIdorSuccessTs: null,
         seq: {},
+        ips: {}, // ip -> { n, last }
+        appNames: [],
       };
       this.students.set(ev.student, s);
     }
     return s;
+  }
+
+  static noteIp(s, ip, ts) {
+    if (!ip) return;
+    const e = s.ips[ip];
+    if (e) {
+      e.n++;
+      e.last = ts;
+    } else if (Object.keys(s.ips).length < 25) s.ips[ip] = { n: 1, last: ts, first: ts };
   }
 
   add(ev) {
@@ -81,7 +132,11 @@ class Store {
     s.requests++;
     if (ev.studentId && !s.id) s.id = ev.studentId;
     if (ev.source !== 'ip') s.source = ev.source;
-    if (ev.appName) s.appName = ev.appName;
+    if (ev.appName) {
+      s.appName = ev.appName;
+      if (!s.appNames.includes(ev.appName) && s.appNames.length < 10) s.appNames.push(ev.appName);
+    }
+    Store.noteIp(s, ev.ip, ev.ts);
     if (ev.status >= 400) s.failed++;
     if (ev.flags.length) s.flagged++;
     if (ev.flags.includes('idor-attempt')) s.idorAttempts++;
@@ -118,6 +173,7 @@ class Store {
   alertFor(ev, s) {
     let type = null;
     let msg = null;
+    if (ev.flags.includes('blocked')) return null;
     if (ev.flags.includes('idor-success')) {
       type = 'idor-success';
       msg = `${ev.student} READ ${ev.endpoint} #${ev.objectId}${ev.owner ? ` (belongs to ${ev.owner})` : ''} - HTTP ${ev.status}, ${ev.size} bytes`;
@@ -161,7 +217,7 @@ class Store {
       const c = `${String(code)[0]}xx`;
       if (classes[c] !== undefined) classes[c] += n;
     }
-    const students = [...this.students.values()].map((s) => ({ ...s }));
+    const students = [...this.students.values()].map((s) => ({ ...s, blocked: this.isBlocked(s.name) }));
     const lb = {
       firstIdorSuccess: this.firstIdorSuccess,
       mostIds: students.filter((s) => s.distinctIds > 0).sort((a, b) => b.distinctIds - a.distinctIds).slice(0, 5).map((s) => ({ student: s.name, value: s.distinctIds })),

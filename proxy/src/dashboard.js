@@ -1,5 +1,5 @@
 'use strict';
-// Dashboard server: static page + JSON API + WebSocket feed. Bound to 127.0.0.1 ONLY.
+// Dashboard server: static pages + JSON API + WebSocket feed + organizer actions. Bound to 127.0.0.1 ONLY.
 
 const http = require('http');
 const fs = require('fs');
@@ -9,33 +9,65 @@ const { log } = require('./util');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
-function createDashboard({ port, store, getRawConfig }) {
+function readJson(req, limit = 16 * 1024) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    let n = 0;
+    req.on('data', (c) => {
+      n += c.length;
+      if (n <= limit) chunks.push(c);
+    });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
+      } catch {
+        resolve(null);
+      }
+    });
+    req.on('error', () => resolve(null));
+  });
+}
+
+function createDashboard({ port, store, admin, getRawConfig }) {
   const bind = '127.0.0.1'; // deliberately not configurable
 
-  const server = http.createServer((req, res) => {
+  const json = (res, status, obj) => {
+    res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(obj));
+  };
+  const page = (res, file) => {
+    fs.readFile(path.join(PUBLIC_DIR, file), (err, data) => {
+      if (err) {
+        res.writeHead(500);
+        return res.end(`${file} missing`);
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(data);
+    });
+  };
+
+  const server = http.createServer(async (req, res) => {
     const url = (req.url || '/').split('?')[0];
-    if (url === '/' || url === '/index.html') {
-      fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (err, data) => {
-        if (err) {
-          res.writeHead(500);
-          return res.end('index.html missing');
+    if (url === '/' || url === '/index.html') return page(res, 'index.html');
+    if (url === '/requests' || url === '/requests.html') return page(res, 'requests.html');
+    if (url === '/api/state') return json(res, 200, store.snapshot());
+    if (url === '/api/stats') return json(res, 200, store.stats());
+    if (url === '/api/config') return json(res, 200, getRawConfig());
+    if (url === '/api/admin' && req.method === 'GET') return json(res, 200, admin.list());
+    if (url.startsWith('/api/admin/') && req.method === 'POST') {
+      const body = await readJson(req);
+      if (!body || typeof body.student !== 'string') return json(res, 400, { error: 'student required' });
+      try {
+        if (url === '/api/admin/block') return json(res, 200, { ok: true, ...admin.block(body.student) });
+        if (url === '/api/admin/unblock') {
+          admin.unblock(body.student);
+          return json(res, 200, { ok: true });
         }
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.end(data);
-      });
-      return;
-    }
-    if (url === '/api/state') {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      return res.end(JSON.stringify(store.snapshot()));
-    }
-    if (url === '/api/stats') {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      return res.end(JSON.stringify(store.stats()));
-    }
-    if (url === '/api/config') {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      return res.end(JSON.stringify(getRawConfig()));
+        if (url === '/api/admin/rename') return json(res, 200, { ok: true, name: admin.rename(body.student, String(body.newName || '')) });
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+      return json(res, 404, { error: 'unknown action' });
     }
     if (url === '/healthz') {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -65,6 +97,9 @@ function createDashboard({ port, store, getRawConfig }) {
     const { req, ...rest } = ev;
     broadcast({ type: 'event', event: rest });
     if (alert) broadcast({ type: 'alert', alert });
+  });
+  store.onReset(() => {
+    if (wss.clients.size) broadcast({ type: 'snapshot', ...store.snapshot() });
   });
 
   const statsTimer = setInterval(() => {

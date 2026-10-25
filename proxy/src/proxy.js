@@ -24,7 +24,7 @@ function decodeBody(encoding, buf) {
   return buf;
 }
 
-function createProxy({ target, bind, port, shouldIgnore, onEvent, gate }) {
+function createProxy({ target, bind, port, shouldIgnore, onEvent, gate, preRequest }) {
   const targetUrl = new URL(target);
   const upstreamHost = targetUrl.hostname;
   const upstreamPort = Number(targetUrl.port) || 80;
@@ -32,6 +32,7 @@ function createProxy({ target, bind, port, shouldIgnore, onEvent, gate }) {
 
   function handle(req, res) {
     if (gate && gate.handle(req, res)) return; // optional "enter your name" page
+    if (preRequest && preRequest(req, res)) return; // blocked students are answered here
     const startNs = process.hrtime.bigint();
     const ts = Date.now();
     const pathOnly = (req.url || '/').split('?')[0];

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTF Watch Requests</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b0f14; --panel:#111820; --panel-2:#0e141b; --border:#1f2a36; --text:#e6edf3; --muted:#8b98a5; --faint:#5b6774;
+    --accent:#3987e5; --notice:#fab219; --warn:#9085e9; --high:#ec835a; --critical:#d03b3b; --good:#0ca30c;
+    --mono: ui-monospace,"JetBrains Mono","Cascadia Mono",Menlo,Consolas,monospace; --sans: Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  * { box-sizing:border-box } html,body { height:100%; margin:0 }
+  body { background:var(--bg); color:var(--text); font:13px/1.45 var(--sans); display:flex; flex-direction:column }
+  header { display:flex; align-items:center; gap:10px; padding:8px 16px; border-bottom:1px solid var(--border); background:var(--panel); flex-wrap:wrap }
+  header .brand { font-weight:700; letter-spacing:.08em; text-transform:uppercase; display:flex; align-items:center; gap:8px }
+  .live { width:9px; height:9px; border-radius:50%; background:var(--faint) } .live.on { background:var(--good) } .live.off { background:var(--critical) }
+  header .n { color:var(--muted); font-family:var(--mono); font-size:11px }
+  .spacer { flex:1 }
+  select, button, input { background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:4px; padding:6px 10px; font:inherit }
+  button { cursor:pointer } button:hover, select:hover { border-color:var(--accent) } button.paused { color:var(--notice); border-color:var(--notice) }
+  input { width:220px; font-family:var(--mono) }
+  main { flex:1; overflow:auto }
+  table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12px }
+  th { text-align:left; color:var(--faint); font-weight:500; padding:6px 12px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel) }
+  td { padding:4px 12px; border-bottom:1px solid rgba(31,42,54,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:520px }
+  tr.sev-critical td { background:rgba(208,59,59,.14) } tr.sev-high td { background:rgba(236,131,90,.10) } tr.sev-warn td { background:rgba(144,133,233,.10) }
+  tr.hidden { display:none }
+  .st { display:inline-block; min-width:28px; text-align:center; border-radius:3px; padding:0 4px }
+  .st.s2 { background:rgba(57,135,229,.25) } .st.s3 { background:rgba(109,167,236,.25) } .st.s4 { background:rgba(250,178,25,.25) } .st.s5 { background:rgba(139,152,165,.3) }
+  .flag { display:inline-block; font-size:10px; padding:0 5px; border-radius:3px; margin-right:3px; border:1px solid }
+  .flag.idor-success { color:var(--critical); border-color:var(--critical) } .flag.idor-attempt { color:var(--high); border-color:var(--high) }
+  .flag.enumeration, .flag.burst-errors { color:var(--warn); border-color:var(--warn) } .flag.blocked { color:var(--muted); border-color:var(--muted) }
+  td.body { color:var(--muted); max-width:300px }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="live" id="live"></span> CTF Watch · Requests</div>
+  <span class="n" id="count">0 rows</span>
+  <div class="spacer"></div>
+  <select id="filter"><option value="">All students</option></select>
+  <input id="search" placeholder="search path / id / flag">
+  <button id="pause">⏸ Pause</button>
+  <button id="clear">Clear</button>
+</header>
+<main>
+  <table>
+    <thead><tr><th>time</th><th>student</th><th>src</th><th>ip</th><th>method</th><th>path</th><th>id</th><th>owner</th><th>status</th><th>bytes</th><th>ms</th><th>flags</th><th>body</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const MAX_ROWS = 3000;
+  const state = { paused: false, buffer: [], filter: new URLSearchParams(location.search).get('student') || '', search: '', count: 0 };
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour12: false });
+  const opts = new Set();
+  function addOpt(name) { if (opts.has(name)) return; opts.add(name); const o = document.createElement('option'); o.value = name; o.textContent = name; $('filter').appendChild(o); if (name === state.filter) $('filter').value = name; }
+  function sevClass(ev) {
+    if (['critical', 'high', 'warn'].includes(ev.severity)) return 'sev-' + ev.severity;
+    return '';
+  }
+  function matches(tr) {
+    if (state.filter && tr.dataset.student !== state.filter) return false;
+    if (state.search && !tr.dataset.text.includes(state.search)) return false;
+    return true;
+  }
+  function addRow(ev) {
+    addOpt(ev.student);
+    const tr = document.createElement('tr');
+    tr.className = sevClass(ev);
+    tr.dataset.student = ev.student;
+    tr.dataset.text = `${ev.method} ${ev.path} ${ev.objectId ?? ''} ${ev.flags.join(' ')} ${ev.status} ${ev.owner ?? ''}`.toLowerCase();
+    const s = String(ev.status)[0];
+    tr.innerHTML = `<td>${fmtTime(ev.ts)}</td><td>${esc(ev.student)}</td><td>${esc(ev.source)}</td><td>${esc(ev.ip)}</td><td>${esc(ev.method)}</td>
+      <td title="${esc(ev.path)}">${esc(ev.path)}</td><td>${esc(ev.objectId ?? '')}</td><td>${esc(ev.owner ?? '')}${ev.mine === false ? ' ✗' : ''}</td>
+      <td><span class="st s${s}">${ev.status}</span></td><td>${ev.size}</td><td>${ev.latencyMs}</td>
+      <td>${ev.flags.map((f) => `<span class="flag ${f}">${f}</span>`).join('')}</td><td class="body">${ev.body ? esc(JSON.stringify(ev.body)) : ''}</td>`;
+    if (!matches(tr)) tr.classList.add('hidden');
+    const tb = $('rows');
+    tb.prepend(tr);
+    while (tb.children.length > MAX_ROWS) tb.lastChild.remove();
+    state.count++;
+    $('count').textContent = `${tb.children.length} rows`;
+  }
+  function applyFilter() { for (const tr of $('rows').children) tr.classList.toggle('hidden', !matches(tr)); }
+  $('filter').addEventListener('change', (e) => { state.filter = e.target.value; applyFilter(); history.replaceState(null, '', state.filter ? `?student=${encodeURIComponent(state.filter)}` : location.pathname); });
+  $('search').addEventListener('input', (e) => { state.search = e.target.value.trim().toLowerCase(); applyFilter(); });
+  $('clear').addEventListener('click', () => { $('rows').innerHTML = ''; $('count').textContent = '0 rows'; });
+  $('pause').addEventListener('click', () => {
+    state.paused = !state.paused;
+    const b = $('pause'); b.classList.toggle('paused', state.paused); b.textContent = state.paused ? '▶ Resume' : '⏸ Pause';
+    if (!state.paused) for (const ev of state.buffer.splice(0)) addRow(ev);
+  });
+  let retry = 1000;
+  function connect() {
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+    ws.onopen = () => { $('live').className = 'live on'; retry = 1000; };
+    ws.onclose = () => { $('live').className = 'live off'; setTimeout(connect, retry); retry = Math.min(retry * 2, 10000); };
+    ws.onerror = () => ws.close();
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'snapshot') { $('rows').innerHTML = ''; for (const ev of m.events) addRow(ev); for (const s of m.stats.students) addOpt(s.name); return; }
+      if (m.type !== 'event') return;
+      if (state.paused) { state.buffer.push(m.event); if (state.buffer.length > 5000) state.buffer.shift(); return; }
+      addRow(m.event);
+    };
+  }
+  connect();
+})();
+</script>
+</body>
+</html>

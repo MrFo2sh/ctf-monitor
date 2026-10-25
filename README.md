@@ -143,7 +143,22 @@ most IDs, who produced the most failed requests.
 **Controls** (top right): filter to one student, change the row order, and ⏸ Pause.
 While paused nothing moves; press ▶ Resume and everything that happened in between is added.
 
-**Recent requests** (bottom): a plain table of the latest requests. Click its title to collapse.
+**Recent requests** (bottom): a plain table of the latest requests. Click its title to collapse,
+⤢ Expand to make it taller, or ↗ New tab to open the full live log in its own browser tab
+(with a search box and a student filter).
+
+**Student card.** Pick a student in the filter box (or click their name on their row). A card
+appears at the top right with how they were identified, their app username and user id, first and
+last seen, request counts, and every **IP address** they have used (with request counts). Two
+buttons also appear in the header:
+
+- ⛔ **Block**: every request from that student (and from their IP, unless several students share
+  it) gets an "Access blocked" page from the proxy and never reaches the CTF. Their row dims and
+  shows BLOCKED. The same button becomes ✅ **Unblock**.
+- ✎ **Rename**: give the row a better name, for example the real name of someone who typed a
+  joke name. History, alerts and the leaderboard are updated.
+
+Both are remembered in `logs/admin-state.json`, so they survive a restart.
 
 Passwords, tokens and other secrets are replaced with `***` everywhere: in the dashboard and in the
 log files. You see *who* did *what*, never their credentials.
