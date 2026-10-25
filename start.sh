@@ -16,6 +16,20 @@ say()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m  %s\n' "$*"; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Load KEY=value lines from .env without executing them (values may contain spaces).
+load_env() {
+  local k v
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    case "$line" in ''|'#'*) continue ;; esac
+    k="${line%%=*}"; v="${line#*=}"
+    [[ "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
+    if [[ "$v" == \"*\" ]]; then v="${v#\"}"; v="${v%\"}"; elif [[ "$v" == \'*\' ]]; then v="${v#\'}"; v="${v%\'}"; fi
+    export "$k=$v"
+  done < "$1"
+}
+
 # ---------------------------------------------------------------- 1. Docker
 command -v docker >/dev/null 2>&1 || die "Docker is not installed. Install it with:  curl -fsSL https://get.docker.com | sudo sh"
 if ! docker info >/dev/null 2>&1; then
@@ -53,11 +67,12 @@ if [ ! -f .env ]; then
       if [ -t 0 ]; then read -r -p "Which port is the CTF app on? [3000]: " PORT; fi
       PORT="${PORT:-3000}"
     fi
+    PORT="${PORT//[^0-9]/}"; PORT="${PORT:-3000}"
     sed -i "s|^CTF_TARGET=.*|CTF_TARGET=http://127.0.0.1:$PORT|" .env
     say "Saved CTF_TARGET=http://127.0.0.1:$PORT to .env  (edit .env to change it)"
   fi
 fi
-set -a; . ./.env; set +a
+load_env .env
 PROXY_PORT="${PROXY_PORT:-8888}"; DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"; PROXY_BIND="${PROXY_BIND:-127.0.0.1}"
 
 PROFILE=""

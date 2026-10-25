@@ -8,7 +8,13 @@ elif command -v docker-compose >/dev/null 2>&1; then COMPOSE="docker-compose"
 else echo "Docker Compose not found"; exit 1; fi
 
 if ! docker info >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then exec sudo -E "$0" "$@"; fi
-[ -f .env ] && { set -a; . ./.env; set +a; }
+if [ -f .env ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
+    k="${line%%=*}"; v="${line#*=}"
+    [[ "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$k=$v"
+  done < .env
+fi
 
 # stop the zrok share we started
 if [ -f logs/zrok.pid ]; then
