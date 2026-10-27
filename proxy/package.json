@@ -7,9 +7,10 @@
   "type": "commonjs",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test --test-reporter=spec \"test/**/*.test.js\""
   },
-  "engines": { "node": ">=18" },
+  "engines": { "node": ">=23.4" },
   "dependencies": {
     "ws": "8.18.0"
   }

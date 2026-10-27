@@ -185,7 +185,15 @@ fi
 echo
 printf '\033[1;32m  ctf-watch is running.\033[0m\n'
 echo
-echo "  Dashboard (this machine only):  http://127.0.0.1:$DASHBOARD_PORT"
+# dashboard accounts (regenerated on every start; also in logs/credentials.txt)
+CREDS="$($COMPOSE logs --no-log-prefix --tail=200 monitor 2>/dev/null | sed -n '/==== DASHBOARD LOGIN ====/,/=====================/p' | grep -E '^\s+(admin|user)\s' || true)"
+if [ -n "$CREDS" ]; then
+  printf '  \033[1;33mDashboard accounts (new on every start):\033[0m\n'
+  echo "$CREDS" | sed 's/^/  /'
+  echo "  (saved in logs/credentials.txt - give user_N accounts to co-organizers, keep admin for yourself)"
+  echo
+fi
+echo "  Dashboard:                      http://${DASHBOARD_BIND:-127.0.0.1}:$DASHBOARD_PORT   (login required)"
 echo "  Proxy for students:             http://$PROXY_BIND:$PROXY_PORT  ->  $CTF_TARGET"
 echo "  Logs:                           $(pwd)/logs/"
 if [ "${NAME_GATE:-0}" = "1" ]; then echo "  Name gate:                      ON - students are asked for their name on first visit"; fi

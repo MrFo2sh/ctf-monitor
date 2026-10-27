@@ -107,4 +107,24 @@ function log(level, ...args) {
   fn(`[${nowIso()}] [${level}]`, ...args);
 }
 
-module.exports = { get, firstOf, shortHash, parseCookies, parseSetCookies, decodeJwt, parseBody, clientIp, nowIso, log };
+// Best-effort MAC address lookup for a LAN ip (only possible when the player is on the same network segment
+// as this machine, i.e. not through zrok). Uses the host's neighbour table; returns null when unknown.
+const macCache = new Map();
+function macFor(ip) {
+  if (process.platform !== 'linux' || !/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) return Promise.resolve(null);
+  if (macCache.has(ip)) return Promise.resolve(macCache.get(ip));
+  return new Promise((resolve) => {
+    try {
+      require('child_process').execFile('ip', ['neigh', 'show', ip], { timeout: 1500 }, (err, out) => {
+        const m = !err && /lladdr\s+([0-9a-f:]{17})/i.exec(String(out));
+        const mac = m ? m[1].toLowerCase() : null;
+        macCache.set(ip, mac);
+        resolve(mac);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+module.exports = { get, firstOf, shortHash, parseCookies, parseSetCookies, decodeJwt, parseBody, clientIp, macFor, nowIso, log };

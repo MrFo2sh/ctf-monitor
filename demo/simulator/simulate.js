@@ -125,6 +125,27 @@ async function noisy(s) {
   }
 }
 
+// web exploitation probes (what the "attack classes" detection is for)
+async function attacker(s) {
+  await s.login();
+  await sleep(6000);
+  const probes = [
+    ['GET', "/api/users/1001'%20OR%20'1'='1"],
+    ['GET', '/api/orders/1041%20UNION%20SELECT%20username,password%20FROM%20users'],
+    ['GET', '/dashboard?name=%3Cscript%3Ealert(document.cookie)%3C/script%3E'],
+    ['GET', '/api/invoice?id=../../../../etc/passwd'],
+    ['GET', '/render?tpl={{7*7}}'],
+    ['GET', '/api/ping?host=127.0.0.1;id'],
+    ['GET', '/fetch?url=http://169.254.169.254/latest/meta-data/'],
+  ];
+  for (const [m, p] of probes) {
+    await s.req(m, p, null, { 'User-Agent': 'sqlmap/1.8#stable (https://sqlmap.org)' });
+    await sleep(rnd(400, 900));
+  }
+  await s.req('POST', '/login', { username: { $ne: null }, password: { $ne: null } });
+  await s.browseOwn(1);
+}
+
 async function anonymous(s) {
   // never logs in - identified by IP only
   await sleep(3000);
@@ -154,6 +175,7 @@ async function round(n) {
       await honest(S('heidi', 8));
     })(),
     anonymous(S('frank', 6)),
+    attacker(S('mallory', 9)),
   ];
   await Promise.all(jobs);
   console.log(`[sim] round ${n} done`);

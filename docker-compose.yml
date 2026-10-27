@@ -2,7 +2,7 @@ name: ctf-watch
 
 # All services share the VM's network (network_mode: host) so that:
 #  - the proxy can reach the CTF container on 127.0.0.1:<port>
-#  - the dashboard is bound to 127.0.0.1 only (not reachable from outside / zrok)
+#  - the dashboard is bound to 127.0.0.1 by default (not reachable from outside / zrok)
 
 services:
   monitor:
@@ -12,20 +12,26 @@ services:
     network_mode: host
     environment:
       CTF_TARGET: ${CTF_TARGET:-http://127.0.0.1:3000}
+      CTF_NAME: ${CTF_NAME:-}
       PROXY_PORT: ${PROXY_PORT:-8888}
       PROXY_BIND: ${PROXY_BIND:-127.0.0.1}
       DASHBOARD_PORT: ${DASHBOARD_PORT:-8080}
+      DASHBOARD_BIND: ${DASHBOARD_BIND:-127.0.0.1}
+      DASHBOARD_USERS: ${DASHBOARD_USERS:-3}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       NAME_GATE: ${NAME_GATE:-0}
       NAME_GATE_TITLE: ${NAME_GATE_TITLE:-Welcome to the CTF}
       DEMO: ${DEMO:-0}
       CONFIG_DIR: /app/config
       LOG_DIR: /app/logs
+      DATA_DIR: /app/data
     volumes:
       - ./config:/app/config:ro
       - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
-    mem_limit: 200m
+    mem_limit: 256m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${DASHBOARD_PORT:-8080}/healthz"]
       interval: 15s

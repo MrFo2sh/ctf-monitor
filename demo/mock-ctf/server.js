@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT || 3999);
 
-const USERS = ['alice', 'bob', 'carol', 'dave', 'eve', 'frank', 'grace', 'heidi'].map((username, i) => ({
+const USERS = ['alice', 'bob', 'carol', 'dave', 'eve', 'frank', 'grace', 'heidi', 'mallory'].map((username, i) => ({
   id: 1001 + i,
   username,
   password: 'password',

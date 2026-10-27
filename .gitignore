@@ -2,6 +2,8 @@
 logs/*
 !logs/.gitkeep
 
+# database (players, requests, alerts, accounts)
+data/
 # local settings
 .env
 inspect-report.txt

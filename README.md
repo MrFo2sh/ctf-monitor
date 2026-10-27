@@ -1,12 +1,14 @@
 # CTF Watch
 
-A small live dashboard that shows what the students are doing in the CTF, as it happens.
-It sits between zrok and the CTF app, watches every request, and highlights IDOR attempts.
+A small live SOC dashboard for web CTFs. It sits between zrok and the CTF app, watches every
+request, and shows who is doing what: IDOR attempts and successes, enumeration, brute force,
+web exploitation attempts (SQL injection, XSS, template injection, path traversal, shells,
+scanners...), per student, as it happens.
 
 ```
 students  →  zrok  →  CTF Watch (proxy)  →  CTF app container
                             ↓
-                   dashboard (only on this VM)
+                   dashboard (login required)
 ```
 
 Nothing in the CTF is changed. The CTF keeps working exactly as before.
@@ -15,266 +17,234 @@ Nothing in the CTF is changed. The CTF keeps working exactly as before.
 
 ## 1. Before you start
 
-You need, on the Ubuntu VM where the CTF container runs:
+On the Ubuntu VM where the CTF container runs you need:
 
-- **Docker** (with the Compose plugin). Check with `docker --version`.
-  If it is missing: `curl -fsSL https://get.docker.com | sudo sh`
-- **zrok**, already working (you are already using it for the CTF).
-- **git** to download this project.
+- **Docker** with the Compose plugin (`docker --version`). Missing? `curl -fsSL https://get.docker.com | sudo sh`
+- **zrok2** (or zrok), already working.
+- **git**.
 
 ## 2. Start it
 
 ```bash
 git clone <this repo url>
-cd ctf-watch
+cd ctf-monitor
 ./start.sh
 ```
 
-The first time, the script looks at your running containers, finds the port of the CTF
-app and asks you to confirm it. Then it builds and starts the monitor. When it is ready it prints
-something like:
+The first time, the script finds the CTF container's port and asks you to confirm it. Then it
+builds and starts the monitor, starts the zrok share pointing at the proxy, and prints:
 
 ```
   ctf-watch is running.
 
-  Dashboard (this machine only):  http://127.0.0.1:8080
-  Proxy for students:             http://127.0.0.1:8888  ->  http://127.0.0.1:5000
+  Dashboard accounts (new on every start):
+    admin  admin_k3x     password: ...
+    user   user_1        password: ...
+    user   user_2        password: ...
+
+  Dashboard:   http://127.0.0.1:8080   (login required)
 
   GIVE THIS LINK TO THE STUDENTS:
-
-      https://abcd1234.share.zrok.io
+      https://xxxxxxxx.shares.zrok.io
 ```
 
-If the script says it cannot talk to Docker, run it with `sudo ./start.sh`.
+If it says it cannot talk to Docker: `sudo ./start.sh`.
 
-## 3. zrok
+## 3. Log in to the dashboard
 
-You do not need to run zrok yourself. `start.sh` finds `zrok2` (or the older `zrok`), starts
-the share for you pointing at the proxy port, and prints the link to give to the students. It runs
-in the background and `./stop.sh` stops it. The command it runs is simply:
+Open http://127.0.0.1:8080 on the VM, or from your laptop:
 
 ```bash
-zrok2 share public --headless 8888
+ssh -L 8080:127.0.0.1:8080 <user>@<vm-ip>      # then open http://127.0.0.1:8080
 ```
 
-If a zrok share is already running when you start (for example the old one that pointed straight
-at the CTF), the script shows it and asks whether to stop it. Say yes: students must go through
-the proxy, otherwise the dashboard sees nothing.
+Accounts are **generated fresh every time the monitor starts** and printed by `start.sh` (also
+saved in `logs/credentials.txt`, readable only by you). Keep `admin_xxx` for yourself; give the
+`user_N` accounts to co-organizers. Users can watch everything and acknowledge alerts; only the
+admin can block, rename, import, replay or open a new CTF. `DASHBOARD_USERS` in `.env` sets how
+many user accounts are made.
 
-Two settings in `.env`, if you need them:
+**One session per account.** If someone logs in to an account that is already in use somewhere
+else, the login is refused, a **critical alert** is raised naming the IP (and the CTF player
+behind it, when known), and that IP is blocked, both from the dashboard and from the CTF. The
+admin can unblock it on the CTFs tab.
 
-- `ZROK_RESERVED=<name>` to keep the same link every time. With zrok2, create the name once with
-  `zrok2 create name <name>`; the script then shares as `public:<name>`.
-- `ZROK_AUTO=0` if you prefer to run zrok yourself. Then run:
-  ```bash
-  zrok2 share public 8888
-  ```
+The dashboard is bound to `127.0.0.1` by default. Because it has a login you may set
+`DASHBOARD_BIND=0.0.0.0` in `.env` to reach it over your LAN. Never share it through zrok.
 
-Students will not notice any difference. Everything they do is the same as before.
-
-## 4. Open the dashboard
-
-On the VM, open a browser at **http://127.0.0.1:8080**.
-
-The dashboard is only reachable from the VM itself. It is **never** visible through zrok, and
-students cannot reach it.
-
-If the VM has no desktop or browser, open a tunnel from your own laptop and view it there:
-
-```bash
-ssh -L 8080:127.0.0.1:8080 <user>@<vm-ip>
-```
-
-then open http://127.0.0.1:8080 on the laptop.
-
-## 5. Stop it
+## 4. Stop it
 
 ```bash
 ./stop.sh
 ```
 
-This also stops the zrok share, so students cannot reach the CTF until you run `./start.sh` again
-(or share the CTF port directly with `zrok2 share public <ctf-port>`).
+This also stops the zrok share. Everything recorded stays in `data/` and `logs/`.
 
-## 6. Try it first (demo mode)
-
-To see the dashboard working before the real event, with a fake CTF and fake students:
+## 5. Try it first (demo mode)
 
 ```bash
 ./start.sh --demo
 ```
 
-Open http://127.0.0.1:8080 and watch. The fake students include honest players, one who
-enumerates IDs, one who steals another user's data, and one who makes a lot of noise. Stop with
-`./stop.sh`. Demo mode does not touch the real CTF.
+A fake CTF and nine fake students play: honest ones, an enumerator, a data thief, a noisy one,
+an anonymous scanner and one throwing injection payloads. Stop with `./stop.sh`.
 
 ---
 
-## What you see on the dashboard
+## The dashboard
 
-**One row per student.** Every request appears as a dot on the student's row, newest on the
-left. Squares are POST/PUT requests, circles are GET. Hover a dot for the details.
+Five tabs. Every tab has a ↗ button that opens it in its own browser tab.
+
+### Live
+
+One row per student; every request is a dot, newest on the left (squares are POST/PUT). Hover a
+dot for details.
 
 | Color | Meaning |
 |---|---|
-| Blue (faint) | Normal request, everything fine |
-| Yellow | The app said no: 401 / 403 / 404 |
-| Grey | The app crashed on that request (5xx) |
-| Purple | **Enumeration**: the student is trying many different IDs quickly, or is spamming errors |
-| Orange, pulsing | **IDOR attempt**: the student asked for an object that is not theirs |
-| Red, glowing | 🚨 **Successful IDOR**: they asked for something that is not theirs AND the app gave it to them |
+| Blue (faint) | Normal request |
+| Yellow | 401 / 403 / 404 |
+| Grey | Server error (5xx) |
+| Purple | Enumeration or a burst of errors |
+| Orange, pulsing | IDOR attempt, or a web attack payload |
+| Red, glowing | 🚨 Successful IDOR |
 
-Under each student's name you see the IDs they are walking through, for example
-`orders: 1041 → 1042 → 1043`, so you can literally watch them enumerate.
+Under each name: the IDs they are walking through (`orders: 1041 → 1042 → 1043`) or the attack
+class just seen. The right column has the searchable student list (green dot = active in the last
+two minutes), the selected student's card with IP addresses and actions, the alert feed, live
+stats (req/s, status codes, top endpoints, attack classes) and the leaderboard. The bottom panel
+is the request log with its own search; ⤢ makes it taller, ↗ opens it in a new tab.
 
-**Alert feed** (top right): the important moments, newest first.
+### Alerts
 
-- 🚨 successful IDOR (red)
-- ⚠️ IDOR attempt (orange)
-- 🔁 enumeration (purple)
-- 💥 burst of errors / brute force (yellow)
+Every alert with a **criticality level**:
 
-**Live stats**: requests per second, how many answers were OK / redirect / client error /
-server error, and the busiest endpoints.
+| Level | What |
+|---|---|
+| critical | successful IDOR, dashboard login conflict, reverse / web shell attempt |
+| high | IDOR attempt, SQL / command / template injection, path traversal, SSRF, XXE, deserialization |
+| medium | enumeration, XSS, NoSQL injection, scanner user agent |
+| low | bursts of errors, blocked requests, open-redirect probes |
+| info | new student seen |
 
-**Leaderboard**: who got the first successful IDOR, who pulled off the most, who enumerated the
-most IDs, who produced the most failed requests.
+Filter by level (click the chips), text, or unacknowledged only. ✓ acknowledges one alert,
+"Acknowledge all" clears the badge in the tab bar.
 
-**Controls** (top right): the row order and ⏸ Pause. While paused nothing moves; press
-▶ Resume and everything that happened in between is added.
+### Students
 
-**Students** (top of the right column): the list of everyone seen, with a search box. Typing
-narrows the list and the rows; clicking a student selects them.
+The table of everyone seen, searchable by name, IP or app username. Click a row (or ↗) for the
+**detail view**: profile, every IP address used, every **user agent** with request counts, the
+**web exploitation attempts** grouped by class with samples (classes with zero attempts are not
+shown), the player's history across past CTFs, and all of their requests.
 
-**Recent requests** (bottom): a plain table of the latest requests, with its own search box
-(path, object id, status code, flag or student). Click the title to collapse, ⤢ Expand to make
-it taller, or ↗ New tab to open the full live log in its own browser tab.
+### Query
 
-**Student card.** Click a student in the list (or their name on their row). A card appears under
-the list with how they were identified, their app username and user id, first and last seen,
-request counts, and every **IP address** they have used (with request counts). The card has three
-buttons:
-
-- ⛔ **Block**: every request from that student (and from their IP, unless several students share
-  it) gets an "Access blocked" page from the proxy and never reaches the CTF. Their row dims and
-  shows BLOCKED. The same button becomes ✅ **Unblock**.
-- 🔁 **Ask to rename** (needs the name gate on): rejects the name the student typed. Their next
-  page load shows the name page again with "The organizer asks you to enter your real name", and
-  their other requests get a short "re-enter your name" answer until they do. They cannot re-use
-  the rejected name. When they enter the new one, their row, history and alerts move to it.
-- ✎ **Rename**: rename the row yourself, without involving the student. History, alerts and the
-  leaderboard are updated.
-
-Both are remembered in `logs/admin-state.json`, so they survive a restart.
-
-Passwords, tokens and other secrets are replaced with `***` everywhere: in the dashboard and in the
-log files. You see *who* did *what*, never their credentials.
-
-## Log files
-
-Every request is appended to `logs/events-<date>.jsonl` (one JSON line per request). You can keep
-these after the event. They are not committed to git.
-
-## How students are identified
-
-In this order:
-
-1. A JWT in a cookie or `Authorization` header (the username inside it).
-2. A session cookie. When a student logs in, the monitor remembers
-   "this session cookie belongs to *alice*". Before that, the session shows as `sess-xxxx`.
-3. If neither exists, the IP address zrok reports (`ip:1.2.3.4`).
-
-## Optional: ask students for their name
-
-If the app's usernames are not helpful (random handles, or everyone shares one test account),
-turn on the **name gate**. Edit `.env`:
+Search the recorded requests with a small query language:
 
 ```
-NAME_GATE=1
+student = "alice" AND status >= 400
+flag = "idor-success"
+attack ~ "sqli" OR attack ~ "xss"
+(path ~ "/api/orders" OR endpoint = "orders") AND NOT student = "alice"
+status in (401, 403) AND ts > "-15m"
+ua ~ "curl" AND size > 500
 ```
 
-and apply it without touching the zrok link:
+Fields: `ts student raw ip method path endpoint id status size latency severity flag attack owner ua source ctf player`.
+Operators: `= != > >= < <= ~ (contains) !~ in`, logic `AND OR NOT ( )`, times like `"-10m"`,
+`"-2h"`, `"-1d"` or an ISO date. While a CTF is running, queries only see that CTF unless you pick
+another one in the drop-down or write `ctf = <id>`. Results can be downloaded as CSV.
 
-```bash
-sudo docker compose up -d monitor
-```
+### CTFs
 
-The first time a student opens the CTF link in a browser they see a
-small page: "Before you start, tell us who you are." After typing a name they land on the CTF as
-normal and never see the page again (the name is kept in a cookie for 30 days). On the dashboard
-that name is used for the student's row, with the app username shown next to it.
+Every event ever recorded, with ⬇ export (a JSON file with requests, alerts and player identities).
+Admin only: ＋ New CTF (closes the current one, keeps its data), ⬆ import an export file,
+▶ replay any past or imported CTF into the Live tab at 1x to max speed, to review a past event or
+rehearse with a realistic feed. Also here: blocked players, blocked dashboard IPs, rename requests.
 
-Only normal browser page loads are asked. Scripts, `curl`, Burp and the app's own API calls are
-never blocked, so the CTF keeps working for all tools. A student who clears cookies is simply asked
-again.
+## Organizer actions
 
-Rows are merged automatically: if someone first shows up as `ip:1.2.3.4` (curl before the
-browser) or `sess-ab12cd34` (before logging in) and is identified later, that anonymous row and
-its requests are folded into the student's row.
+Select a student (Live tab list, or click their name on a row):
 
-Requests that arrive without the name cookie, for example from `curl` or a script, are still
-matched to a student when they come from the same IP address as a browser that already gave a
-name. Those show on the dashboard with the source `ip-match`. If two different students enter
-names from the same IP (shared Wi-Fi), the monitor stops guessing for that IP and uses the app's
-login identity instead, so nobody is blamed for someone else's requests.
+- ⛔ **Block**: every request from that student (and their IP, unless several students share it)
+  gets an "Access blocked" page from the proxy. ✅ Unblock reverses it.
+- 🔁 **Ask to rename** (needs the name gate): their browser shows the name page again with "The
+  organizer asks you to enter your real name"; other requests get a short refusal until they do.
+  History moves to the new name.
+- ✎ **Rename**: rename the row yourself.
+
+All of this is remembered in the database.
+
+## Identifying students
+
+In this order: a JWT in a cookie or `Authorization` header; a session cookie learned when the app
+login succeeds; the IP zrok reports. Anonymous rows (`ip:1.2.3.4`, `sess-ab12cd34`) are merged into
+the student's row as soon as they are identified.
+
+**Name gate** (`NAME_GATE=1` in `.env`): the first time a student opens the CTF in a browser they
+are asked for their name. The name is kept in a signed cookie and used for their row. Requests
+without the cookie from the same IP (curl, scripts) are matched to that name, unless two students
+share the IP. Only browser page loads are ever asked; tools are never blocked.
+
+**Players across CTFs.** Each student is linked to a player record by name, app username, IP and,
+when they are on the same LAN as the VM, MAC address. The next CTF recognises them: the student
+detail view shows their history.
 
 ## Changing the detection rules
 
-Everything lives in one file: **`config/rules.json`**. It is commented inside. You can change:
+One file: **`config/rules.json`**, commented inside, reloaded live. Cookie and JWT names, login
+and "who am I" URLs, the endpoints with object IDs, ownership rules, thresholds, masking, ignored
+paths. `./inspect.sh` writes `inspect-report.txt` with everything needed to tune it for the real
+CTF app (containers, ports, routes, cookie names); send it to whoever maintains the rules.
 
-- cookie / JWT names, the login URL, the "who am I" URL
-- the endpoints that contain object IDs and where the ID is (path, query string, body)
-- how ownership is decided, or a fixed list in `config/ownership.json`
-- the thresholds: how many IDs count as enumeration, how many errors count as a burst
-- which field names are masked
-- which paths are ignored (static files)
+## Files and data
 
-Save the file and the monitor picks it up within a second. No restart needed.
-
-To tune these rules for the real CTF app, run the read-only helper on the VM and send the
-result to whoever maintains this project:
-
-```bash
-./inspect.sh          # writes inspect-report.txt
+```
+start.sh / stop.sh / inspect.sh
+docker-compose.yml          monitor (+ demo app and fake students)
+config/rules.json           detection rules
+data/ctf-watch.db           SQLite database: CTFs, players, requests, alerts, accounts (not in git)
+logs/events-<date>.jsonl    one JSON line per request
+logs/credentials.txt        this start's dashboard accounts (mode 600)
+proxy/                      Node.js source (one dependency: ws); `npm test` runs the unit tests
+demo/                       fake CTF, simulator, load test
 ```
 
-It lists containers, ports, the current zrok process, routes found in the app source, cookie
-names and seed files. It never changes anything.
+## Performance and limits
+
+The monitor is one Node.js process. Requests are proxied as streams, detection is a fixed number
+of regular expressions per request, the live state lives in bounded in-memory ring buffers, and
+database writes are batched in transactions (SQLite in WAL mode). Measured on a laptop with the
+demo stack and 50 concurrent clients: about 10,000 requests per second through the proxy, median
+4 ms and 99th percentile 13 ms of total latency, no errors, the monitor at about 100 MB while
+being hammered (40 to 60 MB in normal use) and 22 MB of database per 100,000 requests. Measure
+your own VM with:
+
+```bash
+node demo/loadtest.js --seconds 10 --concurrency 50     # against ./start.sh --demo only
+```
+
+No Redis and no load balancer are used, on purpose: for one CTF of up to a few hundred students
+a single process is faster than anything distributed, and there is nothing to keep in sync. If a
+future event needs more, the proxy and the dashboard are separate servers already and the
+database is a single file, so the next step is simply running the proxy on more cores behind the
+same database.
+
+## Security notes
+
+- Dashboard: login with scrypt-hashed passwords, one session per account, HttpOnly + SameSite
+  cookies, CSRF header on every write, rate-limited logins, IP blocking, strict security headers.
+- Query language is compiled to parameterised SQL with a field whitelist. No raw SQL is accepted.
+- Passwords, tokens and secrets in CTF traffic are masked before storage and display.
+- The CTF container is never modified. Memory cap: 256 MB (`docker-compose.yml`).
 
 ## Troubleshooting
 
 | Problem | What to do |
 |---|---|
-| `Docker is not installed` | `curl -fsSL https://get.docker.com \| sudo sh`, then log out and in |
 | `Docker is installed but not reachable` | `sudo ./start.sh` |
-| Dashboard page is empty | Is zrok pointing at the proxy port (8888)? See step 3 |
-| Students get `502 Bad Gateway` | The proxy cannot reach the CTF app. Check the port in `.env` (`CTF_TARGET=...`), then `./start.sh` again |
-| Port 8888 or 8080 is already used | Edit `.env`, change `PROXY_PORT` / `DASHBOARD_PORT`, run `./start.sh` again, point zrok at the new proxy port |
-| Everyone shows as `ip:127.0.0.1` | Students are not logging in through a recognised login URL, or the cookie name is different. Run `./inspect.sh` and adjust `config/rules.json` |
+| Lost the dashboard password | `cat logs/credentials.txt`, or restart (`./start.sh`) for new accounts |
+| Locked out after a login conflict | from the VM (localhost is never blocked): CTFs tab → blocked dashboard IPs → unblock |
+| Students get `502 Bad Gateway` | the proxy cannot reach the CTF app: check `CTF_TARGET` in `.env` |
+| Everyone shows as `ip:...` | the app's login URL or cookie name differs: run `./inspect.sh`, adjust `config/rules.json` |
 | See what the monitor is doing | `docker compose logs -f monitor` |
-
-## Security notes
-
-- The dashboard and its WebSocket are bound to `127.0.0.1` inside the VM's network namespace.
-  They are not published on any other address and are not part of the zrok share.
-- The proxy itself also listens on `127.0.0.1` by default, which is enough when zrok runs on
-  the same VM. Set `PROXY_BIND=0.0.0.0` in `.env` only if zrok runs on another machine.
-- The CTF container, its image and its code are never modified.
-- Memory: the whole thing uses roughly 40 to 80 MB. There is a hard limit of 200 MB in
-  `docker-compose.yml`.
-
-## What is inside
-
-```
-start.sh / stop.sh      start and stop everything
-inspect.sh              read-only report about the CTF setup, for tuning the rules
-docker-compose.yml      the monitor (+ the demo app and fake students, demo profile)
-config/rules.json       detection rules - the file to edit
-config/ownership.json   optional fixed "who owns which ID" map
-proxy/                  the Node.js proxy, detector and dashboard (one dependency: ws)
-demo/                   fake CTF app and the fake-student simulator
-logs/                   JSONL request logs
-```
-
-Open source, MIT licensed. Dependencies: Node.js, the `ws` WebSocket library, the `node:20-alpine`
-Docker image.
