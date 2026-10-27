@@ -76,14 +76,24 @@ function dockerApi(path) {
 async function dockerContainers() {
   const list = await dockerApi('/containers/json');
   if (!Array.isArray(list)) return [];
-  return list.map((c) => {
+  const out = [];
+  for (const c of list) {
     const name = (c.Names && c.Names[0] ? c.Names[0] : c.Id.slice(0, 12)).replace(/^\//, '');
     const published = (c.Ports || []).filter((p) => p.PublicPort && p.Type === 'tcp').map((p) => ({ hostIp: p.IP || '0.0.0.0', hostPort: p.PublicPort, containerPort: p.PrivatePort }));
-    const exposed = [...new Set((c.Ports || []).filter((p) => p.Type === 'tcp').map((p) => p.PrivatePort))];
+    let exposed = [...new Set((c.Ports || []).filter((p) => p.Type === 'tcp').map((p) => p.PrivatePort))];
     const ips = Object.values((c.NetworkSettings && c.NetworkSettings.Networks) || {}).map((n) => n.IPAddress).filter(Boolean);
     const hostNet = c.HostConfig && c.HostConfig.NetworkMode === 'host';
-    return { name, image: c.Image, state: c.State, published, exposed, ips, hostNet };
-  });
+    let guessed = false;
+    if (!exposed.length && !name.startsWith('ctf-watch')) {
+      // no port metadata in the list: ask for the image's EXPOSE list
+      const insp = await dockerApi(`/containers/${c.Id}/json`);
+      const ex = insp && insp.Config && insp.Config.ExposedPorts ? Object.keys(insp.Config.ExposedPorts) : [];
+      exposed = ex.filter((k) => k.endsWith('/tcp')).map((k) => Number(k.split('/')[0])).filter(Boolean);
+      if (!exposed.length) guessed = true; // caller probes common ports instead
+    }
+    out.push({ name, image: c.Image, state: c.State, published, exposed, ips, hostNet, guessed });
+  }
+  return out;
 }
 
 function probeHttp(host, port, timeoutMs = 1500) {
@@ -109,31 +119,47 @@ function probeHttp(host, port, timeoutMs = 1500) {
   });
 }
 
+// Docker Desktop (bridge mode): the monitor is not on the host network, so a "host" app lives at
+// host.docker.internal; we probe the usual development ports there.
+const DESKTOP_HOST_PORTS = [80, 3000, 3001, 4000, 4200, 5000, 5001, 5173, 7000, 8000, 8001, 8080, 8081, 8082, 8443, 8888, 9000, 9090];
+
 /**
- * discover({ excludePorts }) -> [{ url, host, port, source, container, image, probe }]
+ * discover({ excludePorts, mode }) -> [{ url, host, port, source, container, image, probe }]
+ * mode: 'host' (Linux, monitor shares the host network - default) | 'bridge' (Docker Desktop override)
  */
-async function discover({ excludePorts = [] } = {}) {
+async function discover({ excludePorts = [], mode = process.env.DISCOVERY_MODE || 'host' } = {}) {
   const ex = new Set(excludePorts.map(Number));
   const byUrl = new Map();
   const add = (host, port, extra) => {
     const url = `http://${host}:${port}`;
-    if (ex.has(Number(port)) && (host === '127.0.0.1')) return;
+    if (ex.has(Number(port)) && (host === '127.0.0.1' || host === 'host.docker.internal')) return;
     const cur = byUrl.get(url) || { url, host, port: Number(port), source: 'host', container: null, image: null };
     byUrl.set(url, { ...cur, ...extra });
   };
-  for (const e of listeningPorts()) add('127.0.0.1', e.port, { bindAddr: e.addr });
   const containers = await dockerContainers();
-  for (const c of containers) {
-    if (c.name === 'ctf-watch' || /^ctf-watch-(simulator)$/.test(c.name)) continue;
-    if (c.hostNet) {
-      for (const p of c.exposed) add('127.0.0.1', p, { source: 'docker', container: c.name, image: c.image });
-      continue;
+  if (mode === 'bridge') {
+    for (const c of containers) {
+      if (c.name === 'ctf-watch' || c.name === 'ctf-watch-simulator') continue;
+      const ports = c.guessed ? DESKTOP_HOST_PORTS : c.exposed;
+      for (const ip of c.ips) for (const p of ports) add(ip, p, { source: c.guessed ? 'docker-guess' : 'docker', container: c.name, image: c.image });
     }
-    for (const p of c.published) add('127.0.0.1', p.hostPort, { source: 'docker', container: c.name, image: c.image, containerPort: p.containerPort });
-    if (!c.published.length) for (const ip of c.ips) for (const p of c.exposed) add(ip, p, { source: 'docker-bridge', container: c.name, image: c.image });
+    for (const p of DESKTOP_HOST_PORTS) add('host.docker.internal', p, { source: 'desktop-host' });
+  } else {
+    for (const e of listeningPorts()) add('127.0.0.1', e.port, { bindAddr: e.addr });
+    for (const c of containers) {
+      if (c.name === 'ctf-watch' || c.name === 'ctf-watch-simulator') continue;
+      if (c.hostNet) {
+        for (const p of c.exposed) add('127.0.0.1', p, { source: 'docker', container: c.name, image: c.image });
+        continue;
+      }
+      for (const p of c.published) add('127.0.0.1', p.hostPort, { source: 'docker', container: c.name, image: c.image, containerPort: p.containerPort });
+      if (!c.published.length) for (const ip of c.ips) for (const p of c.exposed) add(ip, p, { source: 'docker-bridge', container: c.name, image: c.image });
+    }
   }
-  const list = [...byUrl.values()].slice(0, 60);
+  let list = [...byUrl.values()].slice(0, 80);
   await Promise.all(list.map(async (c) => (c.probe = await probeHttp(c.host, c.port))));
+  // the guessed desktop-host ports are only worth showing when something answers there
+  list = list.filter((c) => (c.source !== 'desktop-host' && c.source !== 'docker-guess') || c.probe.ok);
   list.sort((a, b) => Number(b.probe.ok) - Number(a.probe.ok) || (a.source === 'docker' ? -1 : 0) - (b.source === 'docker' ? -1 : 0) || a.port - b.port);
   log('debug', `discover: ${list.length} candidates, ${list.filter((c) => c.probe.ok).length} speak http`);
   return list;

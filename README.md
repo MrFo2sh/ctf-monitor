@@ -62,6 +62,14 @@ record for it. You can switch between challenges at any time the same way, type 
 hand, or **⏏ Disconnect** to close the game. The choice is remembered across restarts. To skip
 the step entirely, set `CTF_TARGET=http://127.0.0.1:<port>` in `.env`.
 
+### Docker Desktop (Windows / macOS laptop)
+
+`start.sh` detects Docker Desktop and adds `docker-compose.desktop.yml` automatically: the
+containers get their own bridge network and the dashboard and proxy are published on
+`127.0.0.1` of your machine. The CTFs tab then lists other containers by name and anything
+answering on the usual development ports of your machine (`host.docker.internal`). Everything else
+is identical. This is handy to try the demo on a laptop; the event itself runs on the Linux VM.
+
 ## 3. Log in to the dashboard
 
 Open http://127.0.0.1:8080 on the VM, or from your laptop:

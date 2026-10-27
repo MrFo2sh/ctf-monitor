@@ -593,7 +593,7 @@
     $('tg-rows').innerHTML = j.candidates.map((c) => {
       const p = c.probe || {};
       const looks = p.ok ? `<span class="st s${String(p.status)[0]}">${p.status}</span> ${esc(p.title || p.contentType || '')}${p.server ? ` <span style="color:var(--muted)">· ${esc(p.server)}</span>` : ''}${p.location ? ` <span style="color:var(--muted)">→ ${esc(p.location)}</span>` : ''}` : `<span style="color:var(--faint)">not http (${esc(p.error || '')})</span>`;
-      const where = c.container ? `🐳 ${esc(c.container)} <span style="color:var(--muted)">${esc(c.image || '')}${c.source === 'docker-bridge' ? ' · bridge ip' : c.containerPort ? ` · container port ${c.containerPort}` : ''}</span>` : `host process${c.bindAddr ? ` <span style="color:var(--muted)">(${esc(c.bindAddr)})</span>` : ''}`;
+      const where = c.container ? `🐳 ${esc(c.container)} <span style="color:var(--muted)">${esc(c.image || '')}${c.source === 'docker-bridge' ? ' · bridge ip' : c.containerPort ? ` · container port ${c.containerPort}` : ''}</span>` : c.source === 'desktop-host' ? 'process on this computer' : `host process${c.bindAddr ? ` <span style="color:var(--muted)">(${esc(c.bindAddr)})</span>` : ''}`;
       const cur = j.current === c.url;
       return `<tr class="${cur ? 'sev-warn' : ''}"><td>${esc(c.url)}${cur ? ' <span class="lvl low">current</span>' : ''}</td><td>${where}</td><td>${looks}</td><td>${isAdmin && !cur ? `<button class="small tg-use" data-url="${esc(c.url)}" data-label="${esc(c.container || 'port ' + c.port)}">▶ Use</button>` : ''}</td></tr>`;
     }).join('') || '<tr><td colspan="4" style="color:var(--faint)">no listening ports found</td></tr>';

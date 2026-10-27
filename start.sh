@@ -42,6 +42,13 @@ fi
 if docker compose version >/dev/null 2>&1; then COMPOSE="docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then COMPOSE="docker-compose"
 else die "Docker Compose is missing. Install the docker-compose-plugin package."; fi
+# Docker Desktop (Windows / macOS) cannot use host networking the way Linux does: use the bridge override
+DESKTOP=0
+if docker info --format '{{.OperatingSystem}}' 2>/dev/null | grep -qi 'docker desktop'; then
+  DESKTOP=1
+  COMPOSE="$COMPOSE -f docker-compose.yml -f docker-compose.desktop.yml"
+  warn "Docker Desktop detected: using docker-compose.desktop.yml (bridge networking, ports on 127.0.0.1)"
+fi
 
 # ---------------------------------------------------------------- 2. settings (.env)
 if [ ! -f .env ]; then
@@ -54,7 +61,7 @@ PROXY_PORT="${PROXY_PORT:-8888}"; DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"; PROX
 PROFILE=""
 if [ "$DEMO" = "1" ]; then
   export DEMO=1 MOCK_PORT="${MOCK_PORT:-3999}"
-  export CTF_TARGET="http://127.0.0.1:$MOCK_PORT"
+  if [ "$DESKTOP" = "1" ]; then export CTF_TARGET="http://ctf-watch-mock-ctf:$MOCK_PORT"; else export CTF_TARGET="http://127.0.0.1:$MOCK_PORT"; fi
   PROFILE="--profile demo"
   say "DEMO MODE: a fake CTF app + fake students will be started. No real CTF is touched."
 else

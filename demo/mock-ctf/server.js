@@ -6,6 +6,7 @@ const http = require('http');
 const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT || 3999);
+const HOST = process.env.HOST || '127.0.0.1';
 
 const USERS = ['alice', 'bob', 'carol', 'dave', 'eve', 'frank', 'grace', 'heidi', 'mallory'].map((username, i) => ({
   id: 1001 + i,
@@ -115,4 +116,4 @@ http
     }
     send(res, 404, { error: 'not found' });
   })
-  .listen(PORT, '127.0.0.1', () => console.log(`mock CTF app on http://127.0.0.1:${PORT}`));
+  .listen(PORT, HOST, () => console.log(`mock CTF app on http://${HOST}:${PORT}`));

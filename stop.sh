@@ -8,6 +8,7 @@ elif command -v docker-compose >/dev/null 2>&1; then COMPOSE="docker-compose"
 else echo "Docker Compose not found"; exit 1; fi
 
 if ! docker info >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then exec sudo -E "$0" "$@"; fi
+if docker info --format '{{.OperatingSystem}}' 2>/dev/null | grep -qi 'docker desktop'; then COMPOSE="$COMPOSE -f docker-compose.yml -f docker-compose.desktop.yml"; fi
 if [ -f .env ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
