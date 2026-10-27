@@ -129,7 +129,7 @@
   <div class="kpi"><b id="k-total">0</b><span>requests</span></div>
   <div class="kpi"><b id="k-students">0</b><span>students</span></div>
   <div class="kpi"><b id="k-alerts" style="color:var(--critical)">0</b><span>open alerts</span></div>
-  <div class="who"><span id="ctf-name" class="badge"></span><span id="me"></span><button class="small" id="logout">Logout</button></div>
+  <div class="who"><span id="ctf-name" class="badge"></span><span id="target-badge" class="badge" title="CTF app behind the proxy (CTFs tab to change)"></span><span id="me"></span><button class="small" id="logout">Logout</button></div>
 </header>
 <main>
 
@@ -257,6 +257,19 @@
 <section class="view" id="view-ctfs">
   <div class="view-head"><h2>CTFs &amp; admin</h2><div class="spacer"></div><button class="small" data-open="/ctfs">↗</button></div>
   <div class="view-body cols">
+    <div class="card wide" id="target-card">
+      <h3>CTF app behind the proxy <span><button class="small" id="tg-scan">↻ Scan ports</button></span></h3>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <span>Students currently reach: <b id="tg-current" style="font-family:var(--mono)">nothing (proxy answers "CTF not open yet")</b></span>
+        <button class="small danger admin-only hidden" id="tg-disconnect">⏏ Disconnect</button>
+      </div>
+      <table><thead><tr><th>address</th><th>where</th><th>looks like</th><th></th></tr></thead><tbody id="tg-rows"><tr><td colspan="4" style="color:var(--faint)">scanning…</td></tr></tbody></table>
+      <div class="admin-only" style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <input id="tg-manual" placeholder="or type one: http://127.0.0.1:5000" style="width:280px;font-family:var(--mono)">
+        <button class="small" id="tg-use-manual">Use</button>
+        <span style="color:var(--muted);font-size:11px">Switching takes effect immediately for the students. You will be asked whether to start a new CTF record.</span>
+      </div>
+    </div>
     <div class="card wide">
       <h3>Events <span><button class="small admin-only" id="ctf-new">＋ New CTF</button></span></h3>
       <table><thead><tr><th>#</th><th>name</th><th>started</th><th>ended</th><th>students</th><th>requests</th><th>alerts</th><th></th></tr></thead><tbody id="ctf-rows"></tbody></table>
@@ -323,7 +336,7 @@
     if (push) history.pushState(null, '', '/' + (v === 'live' ? '' : v));
     if (v === 'alerts') loadAlerts();
     if (v === 'students') renderStudentsTable();
-    if (v === 'ctfs') loadCtfs();
+    if (v === 'ctfs') { loadCtfs(); scanTargets(); }
     if (v === 'query') loadCtfOptions();
   }
   $('nav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) showView(b.dataset.view, true); });
@@ -564,6 +577,40 @@
   });
   async function loadCtfOptions() { const j = await tryApi('/api/ctfs'); if (!j) return; state.ctfs = j.list; $('q-ctf').innerHTML = '<option value="">current CTF</option>' + j.list.map((c) => `<option value="${c.id}">#${c.id} ${esc(c.name)}</option>`).join(''); }
 
+  // ---------- ctfs / admin view: proxy target ----------
+  function renderTarget(t) {
+    $('target-badge').textContent = t ? '→ ' + t.replace(/^http:\/\//, '') : '→ no CTF';
+    $('target-badge').style.color = t ? 'var(--good)' : 'var(--notice)';
+    $('tg-current').textContent = t || 'nothing (proxy answers "CTF not open yet")';
+    $('tg-disconnect').classList.toggle('hidden', !t || !(state.me && state.me.role === 'admin'));
+    $('tg-manual').value = t || '';
+  }
+  async function scanTargets() {
+    $('tg-rows').innerHTML = '<tr><td colspan="4" style="color:var(--faint)">scanning…</td></tr>';
+    const j = await tryApi('/api/targets'); if (!j) return;
+    renderTarget(j.current);
+    const isAdmin = state.me && state.me.role === 'admin';
+    $('tg-rows').innerHTML = j.candidates.map((c) => {
+      const p = c.probe || {};
+      const looks = p.ok ? `<span class="st s${String(p.status)[0]}">${p.status}</span> ${esc(p.title || p.contentType || '')}${p.server ? ` <span style="color:var(--muted)">· ${esc(p.server)}</span>` : ''}${p.location ? ` <span style="color:var(--muted)">→ ${esc(p.location)}</span>` : ''}` : `<span style="color:var(--faint)">not http (${esc(p.error || '')})</span>`;
+      const where = c.container ? `🐳 ${esc(c.container)} <span style="color:var(--muted)">${esc(c.image || '')}${c.source === 'docker-bridge' ? ' · bridge ip' : c.containerPort ? ` · container port ${c.containerPort}` : ''}</span>` : `host process${c.bindAddr ? ` <span style="color:var(--muted)">(${esc(c.bindAddr)})</span>` : ''}`;
+      const cur = j.current === c.url;
+      return `<tr class="${cur ? 'sev-warn' : ''}"><td>${esc(c.url)}${cur ? ' <span class="lvl low">current</span>' : ''}</td><td>${where}</td><td>${looks}</td><td>${isAdmin && !cur ? `<button class="small tg-use" data-url="${esc(c.url)}" data-label="${esc(c.container || 'port ' + c.port)}">▶ Use</button>` : ''}</td></tr>`;
+    }).join('') || '<tr><td colspan="4" style="color:var(--faint)">no listening ports found</td></tr>';
+  }
+  async function useTarget(url, label) {
+    const total = state.stats ? state.stats.total : 0;
+    let newCtf = false, ctfName = '';
+    if (total > 0) { newCtf = confirm(`Switch the proxy to ${url}.\n\nAlso start a NEW CTF record for it? (OK = yes, the current one is closed and kept; Cancel = keep recording into the current CTF)`); }
+    if (newCtf) { ctfName = prompt('Name of the new CTF:', label || url.replace(/^http:\/\//, '')); if (ctfName === null) return; }
+    const j = await tryApi('/api/targets', { url, label, newCtf, ctfName });
+    if (j) { renderTarget(j.target); scanTargets(); loadCtfs(); }
+  }
+  $('tg-scan').addEventListener('click', scanTargets);
+  $('tg-rows').addEventListener('click', (e) => { const b = e.target.closest('button.tg-use'); if (b) useTarget(b.dataset.url, b.dataset.label); });
+  $('tg-use-manual').addEventListener('click', () => { const v = $('tg-manual').value.trim(); if (v) useTarget(v, ''); });
+  $('tg-disconnect').addEventListener('click', async () => { if (confirm('Disconnect the proxy from the CTF app? Students will see "CTF not open yet".')) { const j = await tryApi('/api/targets', { url: null }); if (j) { renderTarget(null); scanTargets(); } } });
+
   // ---------- ctfs / admin view ----------
   async function loadCtfs() {
     const [j, adm] = await Promise.all([tryApi('/api/ctfs'), tryApi('/api/admin')]); if (!j) return;
@@ -589,7 +636,7 @@
   function handleMessage(m, live) {
     if (m.type === 'event') { addDot(m.event, live); addRow(m.event); }
     else if (m.type === 'alert') { addFeedAlert(m.alert, live); state.alerts.unshift(m.alert); if (state.view === 'alerts') { renderLevelChips(); renderAlertsTable(); } }
-    else if (m.type === 'stats') { renderStats(m.stats); renderReplay(m.replay); if (state.view === 'alerts') renderLevelChips(); }
+    else if (m.type === 'stats') { renderStats(m.stats); renderReplay(m.replay); if (m.target !== undefined && $('tg-manual') !== document.activeElement) renderTarget(m.target); if (state.view === 'alerts') renderLevelChips(); }
   }
   function loadSnapshot(s) {
     if (state.serverStart && s.stats.startedAt && s.stats.startedAt !== state.serverStart) { location.reload(); return; }
@@ -614,8 +661,9 @@
     const me = await api('/api/me').catch(() => null); if (!me) return;
     state.me = me; $('me').textContent = `${me.username} (${me.role})`; $('ctf-name').textContent = me.ctf ? me.ctf.name : '';
     if (me.role !== 'admin') document.querySelectorAll('.admin-only').forEach((el) => el.classList.add('hidden'));
-    renderReplay(me.replay);
+    renderReplay(me.replay); renderTarget(me.target);
     const p = location.pathname; showView(viewFromPath(p), false);
+    if (!me.target && me.role === 'admin' && viewFromPath(p) === 'live') showView('ctfs', true); // nothing connected yet: start on the picker
     if (p.startsWith('/students/')) openStudentDetail(decodeURIComponent(p.slice('/students/'.length)), false);
     connect();
   })();

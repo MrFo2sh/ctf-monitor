@@ -31,8 +31,7 @@ cd ctf-monitor
 ./start.sh
 ```
 
-The first time, the script finds the CTF container's port and asks you to confirm it. Then it
-builds and starts the monitor, starts the zrok share pointing at the proxy, and prints:
+The script builds and starts the monitor, starts the zrok share pointing at the proxy, and prints:
 
 ```
   ctf-watch is running.
@@ -49,6 +48,19 @@ builds and starts the monitor, starts the zrok share pointing at the proxy, and 
 ```
 
 If it says it cannot talk to Docker: `sudo ./start.sh`.
+
+The dashboard comes up **before** any CTF is attached. Until you pick one, students opening the
+link see "The CTF is not open yet".
+
+### Pick the CTF app (CTFs tab)
+
+Log in as admin; you land on the **CTFs** tab. The "CTF app behind the proxy" card lists every
+listening port on the VM and every Docker container with its published ports or bridge IP, and
+shows what each one answers (HTTP status, page title, server header). Press **▶ Use** on the
+right one. Switching is immediate for the students, and you are asked whether to start a new CTF
+record for it. You can switch between challenges at any time the same way, type an address by
+hand, or **⏏ Disconnect** to close the game. The choice is remembered across restarts. To skip
+the step entirely, set `CTF_TARGET=http://127.0.0.1:<port>` in `.env`.
 
 ## 3. Log in to the dashboard
 

@@ -24,15 +24,37 @@ function decodeBody(encoding, buf) {
   return buf;
 }
 
-function createProxy({ target, bind, port, shouldIgnore, onEvent, gate, preRequest }) {
-  const targetUrl = new URL(target);
-  const upstreamHost = targetUrl.hostname;
-  const upstreamPort = Number(targetUrl.port) || 80;
+const NO_TARGET_PAGE = '<!doctype html><html><head><meta charset="utf-8"><title>CTF not ready</title></head><body style="font-family:system-ui;background:#0b0f14;color:#e6edf3;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#fab219">The CTF is not open yet</h1><p>The organizer has not connected a challenge to this link. Please try again in a moment.</p></div></body></html>';
+
+/**
+ * createProxy({ getTarget, bind, port, ... })
+ * getTarget() returns the current upstream base URL (http://host:port) or null when no CTF is selected.
+ */
+function createProxy({ getTarget, bind, port, shouldIgnore, onEvent, gate, preRequest }) {
   const agent = new http.Agent({ keepAlive: true, maxSockets: 512 });
+  let cached = { url: null, host: null, port: null };
+  function currentUpstream() {
+    const url = getTarget();
+    if (!url) return null;
+    if (url !== cached.url) {
+      const u = new URL(url);
+      cached = { url, host: u.hostname, port: Number(u.port) || 80 };
+    }
+    return cached;
+  }
 
   function handle(req, res) {
     if (gate && gate.handle(req, res)) return; // optional "enter your name" page
     if (preRequest && preRequest(req, res)) return; // blocked students are answered here
+    const up = currentUpstream();
+    if (!up) {
+      res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': '10' });
+      res.end(NO_TARGET_PAGE);
+      req.resume();
+      return;
+    }
+    const upstreamHost = up.host;
+    const upstreamPort = up.port;
     const startNs = process.hrtime.bigint();
     const ts = Date.now();
     const pathOnly = (req.url || '/').split('?')[0];
@@ -145,7 +167,12 @@ function createProxy({ target, bind, port, shouldIgnore, onEvent, gate, preReque
   // WebSocket / HTTP upgrade: raw TCP tunnel to the app
   function tunnel(req, socket, head) {
     const ts = Date.now();
-    const up = net.connect(upstreamPort, upstreamHost, () => {
+    const target = currentUpstream();
+    if (!target) {
+      socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
+      return socket.destroy();
+    }
+    const up = net.connect(target.port, target.host, () => {
       let raw = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
       for (let i = 0; i < req.rawHeaders.length; i += 2) raw += `${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`;
       raw += `X-Forwarded-For: ${req.socket.remoteAddress || ''}\r\n\r\n`;
@@ -186,7 +213,7 @@ function createProxy({ target, bind, port, shouldIgnore, onEvent, gate, preReque
   });
   server.keepAliveTimeout = 65000;
   server.listen(port, bind, () => {
-    log('info', `proxy listening on http://${bind}:${port} -> ${target}`);
+    log('info', `proxy listening on http://${bind}:${port} -> ${getTarget() || '(no CTF selected yet)'}`);
   });
   return server;
 }

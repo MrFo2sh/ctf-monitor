@@ -7,6 +7,7 @@ const path = require('path');
 const { WebSocketServer } = require('ws');
 const { compile, QueryError } = require('./query');
 const { NameGate } = require('./namegate');
+const { validateTarget } = require('./ports');
 const { log, clientIp } = require('./util');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -42,7 +43,7 @@ const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, getRawConfig }) {
+function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, getTarget, setTarget, discoverTargets, getRawConfig }) {
   bind = bind || '127.0.0.1';
   const json = (res, status, obj) => {
     res.writeHead(status, { 'Content-Type': 'application/json', ...SECURITY_HEADERS });
@@ -116,7 +117,23 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, g
       res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': auth.clearCookie(), ...SECURITY_HEADERS });
       return res.end('{"ok":true}');
     }
-    if (url === '/api/me') return json(res, 200, { ...user, ctf: db.activeCtf(), replay: replay.status() });
+    if (url === '/api/me') return json(res, 200, { ...user, ctf: db.activeCtf(), replay: replay.status(), target: getTarget() });
+
+    // ---- proxy target: which CTF app the students reach
+    if (url === '/api/targets' && req.method === 'GET') return json(res, 200, { current: getTarget(), candidates: await discoverTargets() });
+    if (url === '/api/targets' && req.method === 'POST') {
+      if (adminOnly()) return;
+      const body = await readJson(req).catch(() => ({}));
+      try {
+        if (body.url) validateTarget(String(body.url)); // fail before touching anything
+        let ctf = null;
+        if (body.newCtf) ctf = newCtf(NameGate.clean(body.ctfName) || undefined); // open the new record first so the switch is logged into it
+        const t = setTarget(body.url ? String(body.url) : null, { label: body.label ? String(body.label).slice(0, 80) : undefined });
+        return json(res, 200, { ok: true, target: t, ctf });
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
 
     // ---- live state
     if (url === '/api/state') return json(res, 200, store.snapshot());
@@ -264,7 +281,7 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, g
     if (alert) broadcast({ type: 'alert', alert });
   });
   store.onReset(() => wss.clients.size && broadcast({ type: 'snapshot', ...store.snapshot() }));
-  const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status() }), 1000);
+  const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status(), target: getTarget() }), 1000);
   statsTimer.unref();
 
   server.listen(port, bind, () => log('info', `dashboard on http://${bind}:${port}${bind === '127.0.0.1' ? '  (local only)' : ''}`));

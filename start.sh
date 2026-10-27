@@ -46,31 +46,7 @@ else die "Docker Compose is missing. Install the docker-compose-plugin package."
 # ---------------------------------------------------------------- 2. settings (.env)
 if [ ! -f .env ]; then
   cp .env.example .env
-  if [ "$DEMO" = "0" ]; then
-    say "First run - looking for the CTF container's port..."
-    mapfile -t FOUND < <(docker ps --format '{{.Names}}|{{.Ports}}' | grep -v '^ctf-watch' | grep -oE '[^|]+\|.*' | while IFS='|' read -r name ports; do
-      for p in $(echo "$ports" | grep -oE '(0\.0\.0\.0|127\.0\.0\.1|\[::\]|::):[0-9]+->' | grep -oE ':[0-9]+' | tr -d ':' | sort -u); do echo "$p|$name"; done
-    done | sort -u)
-    PORT=""
-    if [ "${#FOUND[@]}" -eq 1 ]; then
-      PORT="${FOUND[0]%%|*}"
-      say "Found one container with a published port: ${FOUND[0]#*|} on port $PORT"
-    elif [ "${#FOUND[@]}" -gt 1 ]; then
-      echo "Several containers publish ports:"
-      i=1; for f in "${FOUND[@]}"; do echo "   $i) port ${f%%|*}   (container: ${f#*|})"; i=$((i+1)); done
-      if [ -t 0 ]; then
-        read -r -p "Which number is the CTF app? [1]: " choice; choice="${choice:-1}"
-        PORT="${FOUND[$((choice-1))]%%|*}"
-      else PORT="${FOUND[0]%%|*}"; fi
-    else
-      warn "No running container with a published port was found."
-      if [ -t 0 ]; then read -r -p "Which port is the CTF app on? [3000]: " PORT; fi
-      PORT="${PORT:-3000}"
-    fi
-    PORT="${PORT//[^0-9]/}"; PORT="${PORT:-3000}"
-    sed -i "s|^CTF_TARGET=.*|CTF_TARGET=http://127.0.0.1:$PORT|" .env
-    say "Saved CTF_TARGET=http://127.0.0.1:$PORT to .env  (edit .env to change it)"
-  fi
+  say "Created .env with defaults. The CTF app is chosen in the dashboard (CTFs tab) after start."
 fi
 load_env .env
 PROXY_PORT="${PROXY_PORT:-8888}"; DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"; PROXY_BIND="${PROXY_BIND:-127.0.0.1}"
@@ -194,7 +170,11 @@ if [ -n "$CREDS" ]; then
   echo
 fi
 echo "  Dashboard:                      http://${DASHBOARD_BIND:-127.0.0.1}:$DASHBOARD_PORT   (login required)"
-echo "  Proxy for students:             http://$PROXY_BIND:$PROXY_PORT  ->  $CTF_TARGET"
+if [ -n "${CTF_TARGET:-}" ]; then
+  echo "  Proxy for students:             http://$PROXY_BIND:$PROXY_PORT  ->  $CTF_TARGET"
+else
+  printf '  Proxy for students:             http://%s:%s  ->  \033[1;33mnot connected yet: log in, open the CTFs tab, pick the CTF app\033[0m\n' "$PROXY_BIND" "$PROXY_PORT"
+fi
 echo "  Logs:                           $(pwd)/logs/"
 if [ "${NAME_GATE:-0}" = "1" ]; then echo "  Name gate:                      ON - students are asked for their name on first visit"; fi
 echo

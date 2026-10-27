@@ -14,6 +14,7 @@ const { NameGate } = require('./namegate');
 const { Replay } = require('./replay');
 const { classify, worstLevel } = require('./attacks');
 const { createProxy } = require('./proxy');
+const { discover, validateTarget } = require('./ports');
 const { createDashboard } = require('./dashboard');
 const { maskObject, maskUrl, maskText } = require('./mask');
 const { parseBody, clientIp, macFor, log } = require('./util');
@@ -21,7 +22,7 @@ const { parseBody, clientIp, macFor, log } = require('./util');
 const env = (k, d) => (process.env[k] === undefined || process.env[k] === '' ? d : process.env[k]);
 const flag = (k) => /^(1|true|yes)$/i.test(String(env(k, '')));
 
-const CTF_TARGET = env('CTF_TARGET', 'http://127.0.0.1:3000');
+const CTF_TARGET = env('CTF_TARGET', ''); // optional: the dashboard (CTFs tab) picks the target at runtime
 const PROXY_PORT = Number(env('PROXY_PORT', 8888));
 const PROXY_BIND = env('PROXY_BIND', '127.0.0.1');
 const DASHBOARD_PORT = Number(env('DASHBOARD_PORT', 8080));
@@ -188,6 +189,29 @@ function onEvent(x) {
 
 const shouldIgnore = (pathOnly) => getConfig().compiledIgnore.some((re) => re.test(pathOnly));
 
+// ---------------------------------------------------------------- proxy target (the CTF app), switchable at runtime
+let target = db.get('proxy_target', null);
+if (!target && CTF_TARGET) {
+  try {
+    target = validateTarget(CTF_TARGET);
+  } catch (err) {
+    log('error', `CTF_TARGET ignored: ${err.message}`);
+  }
+}
+function setTarget(url, { label } = {}) {
+  const clean = url ? validateTarget(url) : null;
+  const prev = target;
+  target = clean;
+  db.set('proxy_target', clean);
+  if (clean !== prev) {
+    log('info', `proxy target: ${prev || '(none)'} -> ${clean || '(none)'}${label ? ` (${label})` : ''}`);
+    store.emitAlert({ type: 'info', level: 'info', msg: clean ? `Proxy now points at ${clean}${label ? ` (${label})` : ''}` : 'Proxy disconnected from the CTF app' });
+  }
+  return target;
+}
+const getTarget = () => target;
+const discoverTargets = () => discover({ excludePorts: [PROXY_PORT, DASHBOARD_PORT] });
+
 // ---------------------------------------------------------------- lifecycle
 function newCtf(name) {
   replay.stop();
@@ -202,10 +226,10 @@ function newCtf(name) {
   return c;
 }
 
-createProxy({ target: CTF_TARGET, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
-createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, newCtf, getRawConfig: () => config.raw });
+createProxy({ getTarget, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
+createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, newCtf, getTarget, setTarget, discoverTargets, getRawConfig: () => config.raw });
 
-log('info', `ctf-watch v2 started${DEMO ? ' (DEMO MODE)' : ''}${NAME_GATE ? ' (name gate ON)' : ''}. ctf="${ctf.name}" target=${CTF_TARGET} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
+log('info', `ctf-watch v2.1 started${DEMO ? ' (DEMO MODE)' : ''}${NAME_GATE ? ' (name gate ON)' : ''}. ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
 
 function shutdown() {
   log('info', 'shutting down');
