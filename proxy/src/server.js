@@ -10,7 +10,7 @@ const { Store } = require('./store');
 const { Db } = require('./db');
 const { Auth } = require('./auth');
 const { Admin } = require('./admin');
-const { NameGate } = require('./namegate');
+const { NameGate, normalizeConfig } = require('./namegate');
 const { Replay } = require('./replay');
 const { Playground } = require('./playground');
 const { classify, worstLevel } = require('./attacks');
@@ -34,14 +34,32 @@ const LOG_DIR = env('LOG_DIR', path.join(__dirname, '..', '..', 'logs'));
 const DATA_DIR = env('DATA_DIR', path.join(__dirname, '..', '..', 'data'));
 const DB_FILE = env('DB_FILE', path.join(DATA_DIR, 'ctf-watch.db'));
 const CTF_NAME = env('CTF_NAME', '');
-const NAME_GATE = flag('NAME_GATE');
 
 // ---------------------------------------------------------------- core objects
 const config = new Config();
 const getConfig = () => config.get();
 const db = new Db(DB_FILE);
 const ctf = db.openCtf(CTF_NAME || undefined);
-const gate = NAME_GATE ? new NameGate({ secretFile: path.join(DATA_DIR, '.name-gate-secret'), cookie: env('NAME_GATE_COOKIE', 'ctfw_name'), title: env('NAME_GATE_TITLE', 'Welcome to the CTF') }) : null;
+// The gate (the form students fill on their first browser visit) is configured in the dashboard, Gate tab.
+let gateConfig = normalizeConfig(db.get('gate_config', null) || { title: env('NAME_GATE_TITLE', 'Welcome to the CTF') });
+const profiles = db.get('gate_profiles', {}); // raw student name -> answers to the extra gate fields
+const gate = new NameGate({
+  secretFile: path.join(DATA_DIR, '.name-gate-secret'),
+  cookie: env('NAME_GATE_COOKIE', 'ctfw_name'),
+  getConfig: () => gateConfig,
+  onProfile: (name, profile) => {
+    profiles[name] = { ...(profiles[name] || {}), ...profile, _at: Date.now() };
+    db.set('gate_profiles', profiles);
+    const s = store.students.get(admin.alias(name));
+    if (s) s.profile = profiles[name];
+  },
+});
+function setGateConfig(raw) {
+  gateConfig = normalizeConfig(raw);
+  db.set('gate_config', gateConfig);
+  log('info', `gate config saved: ${gateConfig.enabled ? 'on' : 'off'}, fields: ${gateConfig.fields.map((f) => f.key).join(', ')}`);
+  return gateConfig;
+}
 const identity = new IdentityResolver(getConfig, gate);
 const detector = new Detector(getConfig);
 const store = new Store({ logDir: LOG_DIR, db });
@@ -99,7 +117,7 @@ function mergeLane(anonLabel, rawName) {
   playerCache.delete(anonLabel);
   log('info', `merged row ${anonLabel} into ${target}`);
 }
-if (gate) gate.onIpNamed = (ip, name) => mergeLane(`ip:${ip}`, name);
+gate.onIpNamed = (ip, name) => mergeLane(`ip:${ip}`, name);
 identity.onSessionNamed = (label, name) => mergeLane(label, name);
 
 // player mapping across CTFs (name / app username / ip / mac). Cached per student row.
@@ -108,7 +126,12 @@ function playerIdFor(who, ip, ts) {
   const key = who.name;
   const cached = playerCache.get(key);
   const identities = [];
-  if (who.source === 'name' || who.source === 'ip-match') identities.push({ kind: 'name', value: who.rawName || who.name });
+  if (who.source === 'name' || who.source === 'ip-match') {
+    identities.push({ kind: 'name', value: who.rawName || who.name });
+    // extra gate answers (id, email...) are strong identities across CTFs
+    const prof = profiles[who.rawName || who.name] || {};
+    for (const [k, v] of Object.entries(prof)) if (!k.startsWith('_') && v && v !== '***' && /^(id|.*_id|.*id|email|mail|phone|student.*|roll.*)$/i.test(k)) identities.push({ kind: `gate:${k}`, value: String(v).toLowerCase() });
+  }
   const appName = who.appName || (who.source === 'session' || who.source === 'jwt' || who.source === 'login' ? who.name : null);
   if (appName && !/^sess-/.test(appName)) identities.push({ kind: 'username', value: appName });
   if (ip && who.source !== 'ip') identities.push({ kind: 'ip', value: ip });
@@ -179,7 +202,7 @@ function onEvent(x) {
 
   const ev = {
     ts: x.ts, time: new Date(x.ts).toISOString(), student: who.name, rawName: who.rawName || who.name, studentId: who.id, source: who.source,
-    appName: who.appName || undefined, playerId: playerIdFor(who, ip, x.ts), ip, method: x.method, path: maskText(maskUrl(x.url, cfg.maskFields)),
+    appName: who.appName || undefined, profile: profiles[who.rawName || who.name] || undefined, playerId: playerIdFor(who, ip, x.ts), ip, method: x.method, path: maskText(maskUrl(x.url, cfg.maskFields)),
     endpoint: verdict.endpoint, objectId: verdict.objectId, status: x.status, size: x.size, latencyMs: x.latencyMs, flags, attacks, severity,
     owner: verdict.owner, ownerBasis: verdict.ownerBasis, mine: verdict.mine, seq: verdict.seq, sequential: verdict.sequential, distinctIds: verdict.distinctIds,
     idsSeenTotal: verdict.idsSeenTotal, ua: String(x.req.headers['user-agent'] || '').slice(0, 160),
@@ -241,7 +264,7 @@ function resetLive() {
   detector.students.clear();
   detector.learned.clear();
   playerCache.clear();
-  if (gate) gate.ipNames.clear();
+  gate.ipNames.clear();
 }
 function newCtf(name) {
   replay.stop();
@@ -264,9 +287,9 @@ function stopCtf() {
 }
 
 createProxy({ getTarget, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
-createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
+createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, gate, setGateConfig, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
 
-log('info', `ctf-watch v2.1 started${NAME_GATE ? ' (name gate ON)' : ''}. ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
+log('info', `ctf-watch v2.1 started (gate ${gateConfig.enabled ? 'on' : 'off'}, fields: ${gateConfig.fields.map((f) => f.key).join(', ')}). ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
 
 function shutdown() {
   log('info', 'shutting down');

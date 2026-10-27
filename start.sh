@@ -173,7 +173,6 @@ else
   printf '  Proxy for students:             http://%s:%s  ->  \033[1;33mnot connected yet: log in, open the CTFs tab, pick the CTF app\033[0m\n' "$PROXY_BIND" "$PROXY_PORT"
 fi
 echo "  Logs:                           $(pwd)/logs/"
-if [ "${NAME_GATE:-0}" = "1" ]; then echo "  Name gate:                      ON - students are asked for their name on first visit"; fi
 echo
 echo "  No real CTF yet? Log in and open the Playground tab for a fake CTF app with fake students."
 echo

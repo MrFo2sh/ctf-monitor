@@ -83,7 +83,7 @@ class Admin {
   }
 
   requireRename(displayName) {
-    if (!this.gate) throw new Error('the name gate is off (set NAME_GATE=1 in .env)');
+    if (!this.gate || !this.gate.enabled) throw new Error('the gate is switched off (Gate tab) - turn it on to ask students for their name');
     const raw = this.rawNameFor(displayName);
     this.gate.revoke(raw);
     this.state.revoked[raw] = Date.now();

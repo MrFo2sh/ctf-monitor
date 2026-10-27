@@ -6,12 +6,12 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const { compile, QueryError } = require('./query');
-const { NameGate } = require('./namegate');
+const { NameGate, normalizeConfig, TYPES, GATE_PATH } = require('./namegate');
 const { validateTarget } = require('./ports');
 const { log, clientIp } = require('./util');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const PAGES = new Set(['/', '/live', '/alerts', '/students', '/query', '/requests', '/admin', '/ctfs', '/playground']);
+const PAGES = new Set(['/', '/live', '/alerts', '/students', '/query', '/requests', '/admin', '/ctfs', '/playground', '/gate']);
 const CSRF_HEADER = 'x-requested-with';
 
 function readBody(req, limit) {
@@ -43,7 +43,7 @@ const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-function createDashboard({ port, bind, store, admin, auth, db, replay, playground, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
+function createDashboard({ port, bind, store, admin, auth, db, replay, playground, gate, setGateConfig, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
   bind = bind || '127.0.0.1';
   // while the live view shows a replayed CTF, history views (alerts, student detail, query) read that CTF
   const scopeCtf = (explicit) => (explicit ? Number(explicit) : store.replayCtfId || db.ctfId || undefined);
@@ -236,6 +236,28 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
         return json(res, 400, { error: err.message });
       }
     }
+    // ---- gate (the form students fill on first visit)
+    if (url === '/api/gate' && req.method === 'GET') return json(res, 200, { config: gate.config, types: TYPES, path: GATE_PATH });
+    if (url === '/api/gate' && req.method === 'POST') {
+      if (adminOnly()) return;
+      const body = await readJson(req).catch(() => null);
+      if (!body || typeof body !== 'object') return json(res, 400, { error: 'bad json' });
+      return json(res, 200, { ok: true, config: setGateConfig(body) });
+    }
+    if (url === '/api/gate/preview') {
+      // the exact page students get, rendered with the saved config (or an unsaved one passed as ?config=)
+      let cfg = null;
+      try {
+        if (qs.get('config')) cfg = normalizeConfig(JSON.parse(qs.get('config')));
+      } catch {}
+      const saved = gate.getConfig;
+      if (cfg) gate.getConfig = () => cfg;
+      const html = gate.page('/', qs.get('error') || '');
+      gate.getConfig = saved;
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...SECURITY_HEADERS, 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'" });
+      return res.end(html.replace('<form method="post"', '<form onsubmit="return false" method="post"'));
+    }
+
     // ---- mock playground (fake CTF app + fake students, run as child processes of the monitor)
     if (url === '/api/playground' && req.method === 'GET') return json(res, 200, playground.status());
     if (url.startsWith('/api/playground/') && req.method === 'POST') {
@@ -318,7 +340,7 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
     if (alert) broadcast({ type: 'alert', alert });
   });
   store.onReset(() => wss.clients.size && broadcast({ type: 'snapshot', ...store.snapshot() }));
-  const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status(), target: getTarget(), mock: { app: playground.mock.running(), sim: playground.sim.running() } }), 1000);
+  const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status(), target: getTarget(), mock: { app: playground.mock.running(), sim: playground.sim.running() }, gate: gate.enabled }), 1000);
   statsTimer.unref();
 
   server.listen(port, bind, () => log('info', `dashboard on http://${bind}:${port}${bind === '127.0.0.1' ? '  (local only)' : ''}`));

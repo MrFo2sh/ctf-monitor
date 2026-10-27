@@ -110,6 +110,7 @@ class Store {
       s.appName = ev.appName;
       if (!s.appNames.includes(ev.appName) && s.appNames.length < 10) s.appNames.push(ev.appName);
     }
+    if (ev.profile) s.profile = ev.profile;
     Store.noteIp(s, ev.ip, ev.ts);
     if (ev.ua) {
       if (s.uas[ev.ua] !== undefined) s.uas[ev.ua]++;
@@ -225,6 +226,7 @@ class Store {
         for (const [c, n] of Object.entries(s.attacks)) t.attacks[c] = (t.attacks[c] || 0) + n;
         for (const a of s.appNames) if (!t.appNames.includes(a)) t.appNames.push(a);
         t.playerId = t.playerId || s.playerId;
+        t.profile = t.profile || s.profile;
       } else {
         s.name = newName;
         this.students.set(newName, s);

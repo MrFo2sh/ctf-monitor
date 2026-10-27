@@ -22,8 +22,6 @@ services:
       DASHBOARD_USERS: ${DASHBOARD_USERS:-3}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      NAME_GATE: ${NAME_GATE:-0}
-      NAME_GATE_TITLE: ${NAME_GATE_TITLE:-Welcome to the CTF}
       CONFIG_DIR: /app/config
       LOG_DIR: /app/logs
       DATA_DIR: /app/data

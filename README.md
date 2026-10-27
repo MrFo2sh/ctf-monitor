@@ -196,7 +196,7 @@ Select a student (Live tab list, or click their name on a row):
 
 - ⛔ **Block**: every request from that student (and their IP, unless several students share it)
   gets an "Access blocked" page from the proxy. ✅ Unblock reverses it.
-- 🔁 **Ask to rename** (needs the name gate): their browser shows the name page again with "The
+- 🔁 **Ask to rename** (needs the gate on): their browser shows the gate form again with "The
   organizer asks you to enter your real name"; other requests get a short refusal until they do.
   History moves to the new name.
 - ✎ **Rename**: rename the row yourself.
@@ -209,10 +209,16 @@ In this order: a JWT in a cookie or `Authorization` header; a session cookie lea
 login succeeds; the IP zrok reports. Anonymous rows (`ip:1.2.3.4`, `sess-ab12cd34`) are merged into
 the student's row as soon as they are identified.
 
-**Name gate** (`NAME_GATE=1` in `.env`): the first time a student opens the CTF in a browser they
-are asked for their name. The name is kept in a signed cookie and used for their row. Requests
-without the cookie from the same IP (curl, scripts) are matched to that name, unless two students
-share the IP. Only browser page loads are ever asked; tools are never blocked.
+**The gate** (Gate tab, on by default): the first time a student opens the CTF in a browser they
+get a form. The username field is always there and becomes their identity; you can add any other
+fields (student id, email, team as a choice list, and so on) with a label, a type and a required
+flag, change the title and intro text, and see a live preview. Answers are kept per student and
+shown on their card and detail page; an id or email also helps recognise the same person in a
+future CTF. A password-type field is never stored. The name goes into a signed cookie and is used
+for their row. Requests without the cookie from the same IP (curl, scripts) are matched to that
+name, unless two students share the IP. Only browser page loads are ever asked; tools are never
+blocked. The gate can be switched off in the tab, in which case students are identified by the
+app's login or their IP.
 
 **Players across CTFs.** Each student is linked to a player record by name, app username, IP and,
 when they are on the same LAN as the VM, MAC address. The next CTF recognises them: the student
