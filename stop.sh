@@ -24,6 +24,7 @@ if [ -f logs/zrok.pid ]; then
   rm -f logs/zrok.pid
 fi
 pkill -f "zrok2? share .*${PROXY_PORT:-8888}" 2>/dev/null || true
+rm -f logs/zrok.url
 
 $COMPOSE --profile demo down --remove-orphans
 echo

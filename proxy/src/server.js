@@ -212,6 +212,28 @@ function setTarget(url, { label } = {}) {
 const getTarget = () => target;
 const discoverTargets = () => discover({ excludePorts: [PROXY_PORT, DASHBOARD_PORT] });
 
+// The public (zrok) link the students use. start.sh writes logs/zrok.url; otherwise parse zrok's own log.
+function studentLink() {
+  try {
+    const f = path.join(LOG_DIR, 'zrok.url');
+    if (fs.existsSync(f)) {
+      const u = fs.readFileSync(f, 'utf8').trim();
+      if (u) return { url: u, source: 'start.sh', since: fs.statSync(f).mtimeMs };
+    }
+    const lg = path.join(LOG_DIR, 'zrok.log');
+    if (fs.existsSync(lg)) {
+      const st = fs.statSync(lg);
+      const fd = fs.openSync(lg, 'r');
+      const buf = Buffer.alloc(Math.min(st.size, 64 * 1024));
+      fs.readSync(fd, buf, 0, buf.length, Math.max(0, st.size - buf.length));
+      fs.closeSync(fd);
+      const m = /(https?:\/\/)?([A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.zrok\.io[A-Za-z0-9./_-]*)/.exec(buf.toString('utf8'));
+      if (m) return { url: `https://${m[2]}`, source: 'zrok.log', since: st.mtimeMs };
+    }
+  } catch {}
+  return { url: null, source: null, hint: DEMO ? 'demo mode does not start zrok' : `no zrok share seen; run: zrok2 share public ${PROXY_PORT}` };
+}
+
 // ---------------------------------------------------------------- lifecycle
 function resetLive() {
   store.reset();
@@ -241,7 +263,7 @@ function stopCtf() {
 }
 
 createProxy({ getTarget, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
-createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, newCtf, stopCtf, getTarget, setTarget, discoverTargets, getRawConfig: () => config.raw });
+createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
 
 log('info', `ctf-watch v2.1 started${DEMO ? ' (DEMO MODE)' : ''}${NAME_GATE ? ' (name gate ON)' : ''}. ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
 

@@ -104,6 +104,7 @@ if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
     if [ -f logs/zrok.pid ] && kill -0 "$(cat logs/zrok.pid)" 2>/dev/null && pgrep -af 'zrok2? share' | grep -q "[: ]$PROXY_PORT\b"; then
       ZROK_URL="$(grep -oE '(https?://)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.zrok\.io[A-Za-z0-9./_-]*' logs/zrok.log 2>/dev/null | head -1 || true)"
       case "$ZROK_URL" in ''|http://*|https://*) ;; *) ZROK_URL="https://$ZROK_URL" ;; esac
+      [ -n "$ZROK_URL" ] && echo "$ZROK_URL" > logs/zrok.url
       ZROK_NOTE="${ZROK_URL:+keep}"
       [ -z "$ZROK_URL" ] && ZROK_NOTE="The zrok share from the previous start is still running (see logs/zrok.log for the link)."
       say "zrok share already running for port $PROXY_PORT - keeping it"
@@ -152,6 +153,7 @@ if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
         if ! kill -0 "$(cat logs/zrok.pid)" 2>/dev/null; then break; fi
         sleep 1
       done
+      [ -n "$ZROK_URL" ] && echo "$ZROK_URL" > logs/zrok.url   # shown on the dashboard (CTFs tab)
       if [ -z "$ZROK_URL" ]; then
         if kill -0 "$(cat logs/zrok.pid)" 2>/dev/null; then
           ZROK_NOTE="zrok is running but printed no link yet. Last lines of logs/zrok.log:"

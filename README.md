@@ -54,7 +54,8 @@ link see "The CTF is not open yet".
 
 ### Pick the CTF app (CTFs tab)
 
-Log in as admin; you land on the **CTFs** tab. The "CTF app behind the proxy" card lists every
+Log in as admin; you land on the **CTFs** tab. The "CTF app behind the proxy" card shows the
+**student link** (the zrok address, with a copy button) and lists every
 listening port on the VM and every Docker container with its published ports or bridge IP, and
 shows what each one answers (HTTP status, page title, server header). Press **▶ Use** on the
 right one. Switching is immediate for the students, and you are asked whether to start a new CTF

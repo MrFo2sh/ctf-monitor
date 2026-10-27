@@ -265,8 +265,13 @@
   <div class="view-body cols">
     <div class="card wide" id="target-card">
       <h3>CTF app behind the proxy <span><button class="small" id="tg-scan">↻ Scan ports</button></span></h3>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+        <span>🔗 Student link: <b id="tg-link" style="font-family:var(--mono);user-select:all">…</b></span>
+        <button class="small hidden" id="tg-copy" title="Copy the link">⧉ Copy</button>
+        <span id="tg-link-note" style="color:var(--muted);font-size:11px"></span>
+      </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-        <span>Students currently reach: <b id="tg-current" style="font-family:var(--mono)">nothing (proxy answers "CTF not open yet")</b></span>
+        <span>→ which currently reaches: <b id="tg-current" style="font-family:var(--mono)">nothing (proxy answers "CTF not open yet")</b></span>
         <button class="small danger admin-only hidden" id="tg-disconnect">⏏ Disconnect</button>
       </div>
       <table><thead><tr><th>address</th><th>where</th><th>looks like</th><th></th></tr></thead><tbody id="tg-rows"><tr><td colspan="4" style="color:var(--faint)">scanning…</td></tr></tbody></table>
@@ -598,10 +603,21 @@
     $('tg-disconnect').classList.toggle('hidden', !t || !(state.me && state.me.role === 'admin'));
     $('tg-manual').value = t || '';
   }
+  function renderLink(l) {
+    if (!l) return;
+    const has = !!l.url;
+    $('tg-link').textContent = has ? l.url : `http://127.0.0.1:${l.proxyPort || 8888} (this machine only)`;
+    $('tg-link').style.color = has ? 'var(--good)' : 'var(--notice)';
+    $('tg-copy').classList.toggle('hidden', !has);
+    $('tg-copy').dataset.url = l.url || '';
+    $('tg-link-note').textContent = has ? `zrok share (${l.source}${l.since ? ', since ' + fmtTime(l.since) : ''})` : (l.hint || '');
+  }
+  $('tg-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('tg-copy').dataset.url); $('tg-copy').textContent = '✓ Copied'; setTimeout(() => ($('tg-copy').textContent = '⧉ Copy'), 1500); } catch { prompt('Copy the link:', $('tg-copy').dataset.url); } });
   async function scanTargets() {
     $('tg-rows').innerHTML = '<tr><td colspan="4" style="color:var(--faint)">scanning…</td></tr>';
+    tryApi('/api/link').then(renderLink); // quick, independent of the port scan
     const j = await tryApi('/api/targets'); if (!j) return;
-    renderTarget(j.current);
+    renderTarget(j.current); renderLink(j.link);
     const isAdmin = state.me && state.me.role === 'admin';
     $('tg-rows').innerHTML = j.candidates.map((c) => {
       const p = c.probe || {};

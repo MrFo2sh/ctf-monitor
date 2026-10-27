@@ -43,7 +43,7 @@ const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, stopCtf, getTarget, setTarget, discoverTargets, getRawConfig }) {
+function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
   bind = bind || '127.0.0.1';
   // while the live view shows a replayed CTF, history views (alerts, student detail, query) read that CTF
   const scopeCtf = (explicit) => (explicit ? Number(explicit) : store.replayCtfId || db.ctfId || undefined);
@@ -122,7 +122,8 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, s
     if (url === '/api/me') return json(res, 200, { ...user, ctf: db.activeCtf(), replay: replay.status(), target: getTarget() });
 
     // ---- proxy target: which CTF app the students reach
-    if (url === '/api/targets' && req.method === 'GET') return json(res, 200, { current: getTarget(), candidates: await discoverTargets() });
+    if (url === '/api/targets' && req.method === 'GET') return json(res, 200, { current: getTarget(), link: studentLink(), proxyPort, candidates: await discoverTargets() });
+    if (url === '/api/link') return json(res, 200, { ...studentLink(), proxyPort });
     if (url === '/api/targets' && req.method === 'POST') {
       if (adminOnly()) return;
       const body = await readJson(req).catch(() => ({}));
