@@ -213,21 +213,35 @@ const getTarget = () => target;
 const discoverTargets = () => discover({ excludePorts: [PROXY_PORT, DASHBOARD_PORT] });
 
 // ---------------------------------------------------------------- lifecycle
-function newCtf(name) {
-  replay.stop();
-  db.endCtf(db.ctfId);
-  const c = db.openCtf(name || undefined);
+function resetLive() {
   store.reset();
   detector.students.clear();
   detector.learned.clear();
   playerCache.clear();
   if (gate) gate.ipNames.clear();
+}
+function newCtf(name) {
+  replay.stop();
+  db.endCtf(db.ctfId);
+  const c = db.openCtf(name || undefined);
+  resetLive();
   log('info', `switched to CTF #${c.id} "${c.name}"`);
   return c;
 }
+// Stop CTF: close the record, disconnect the students, clear the live view. Nothing is recorded until
+// a target is picked again (which opens a new record automatically) or "New CTF" is pressed.
+function stopCtf() {
+  replay.stop();
+  const ended = db.activeCtf();
+  setTarget(null, { label: 'CTF stopped' });
+  db.endCtf(db.ctfId);
+  resetLive();
+  if (ended) log('info', `CTF #${ended.id} "${ended.name}" stopped`);
+  return ended;
+}
 
 createProxy({ getTarget, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
-createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, newCtf, getTarget, setTarget, discoverTargets, getRawConfig: () => config.raw });
+createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, newCtf, stopCtf, getTarget, setTarget, discoverTargets, getRawConfig: () => config.raw });
 
 log('info', `ctf-watch v2.1 started${DEMO ? ' (DEMO MODE)' : ''}${NAME_GATE ? ' (name gate ON)' : ''}. ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
 

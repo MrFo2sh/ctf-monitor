@@ -44,6 +44,7 @@ class Store {
   }
 
   reset() {
+    this.replayCtfId = null; // set by Replay.start(): the live view shows that CTF, history views follow it
     this.startedAt = Date.now();
     this.events = [];
     this.alerts = [];
@@ -76,7 +77,7 @@ class Store {
         distinctIds: 0, firstIdorSuccessTs: null, seq: {}, ips: {}, appNames: [], attacks: {}, uas: {},
       };
       this.students.set(ev.student, s);
-      this.emitAlert({ ts: ev.ts, type: 'new-student', student: ev.student, ip: ev.ip, msg: `${ev.student} appeared (${ev.source}${ev.ip ? `, ip ${ev.ip}` : ''})` });
+      this.emitAlert({ ts: ev.ts, type: 'new-student', student: ev.student, ip: ev.ip, replay: !!ev.replay, msg: `${ev.student} appeared (${ev.source}${ev.ip ? `, ip ${ev.ip}` : ''})` });
     }
     return s;
   }
@@ -151,7 +152,7 @@ class Store {
 
   // Alerts raised by other parts of the system (login conflicts, admin actions...)
   emitAlert(a) {
-    const alert = { n: 0, ts: a.ts || Date.now(), level: a.level || ALERT_LEVEL[a.type] || 'info', type: a.type, student: a.student || null, ip: a.ip || null, msg: a.msg, data: a.data || null, ack: 0 };
+    const alert = { n: 0, ts: a.ts || Date.now(), level: a.level || ALERT_LEVEL[a.type] || 'info', type: a.type, student: a.student || null, ip: a.ip || null, msg: a.msg, data: a.data || null, ack: 0, replay: !!a.replay };
     this.pushAlert(alert);
     for (const l of this.listeners) {
       try {
@@ -164,7 +165,7 @@ class Store {
   pushAlert(alert) {
     this.alerts.push(alert);
     if (this.alerts.length > MAX_ALERTS) this.alerts.splice(0, this.alerts.length - MAX_ALERTS);
-    if (this.db) this.db.addAlert(alert);
+    if (this.db && !alert.replay) this.db.addAlert(alert); // replayed alerts already exist in the replayed CTF
   }
 
   alertFor(ev, s) {
@@ -194,7 +195,7 @@ class Store {
       msg = `${ev.student} is enumerating ${ev.endpoint}: ${ev.distinctIds} different IDs (${(ev.seq || []).slice(-4).join(' -> ')})`;
     }
     if (!type) return null;
-    return { n: ev.n, ts: ev.ts, level: level || ALERT_LEVEL[type], type, student: ev.student, ip: ev.ip, endpoint: ev.endpoint, objectId: ev.objectId, owner: ev.owner, status: ev.status, msg, ack: 0 };
+    return { n: ev.n, ts: ev.ts, level: level || ALERT_LEVEL[type], type, student: ev.student, ip: ev.ip, endpoint: ev.endpoint, objectId: ev.objectId, owner: ev.owner, status: ev.status, msg, ack: 0, replay: !!ev.replay };
   }
 
   renameStudent(oldName, newName) {

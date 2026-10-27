@@ -12,8 +12,11 @@ class Replay {
     this.state = null; // { ctfId, speed, total, done, startedAt }
   }
 
+  // loaded = the live view currently shows this replayed CTF (stays set after the replay finished,
+  // until Stop / New CTF / another replay clears the live view)
   status() {
-    return this.state ? { ...this.state, running: !!this.timer } : { running: false };
+    const loaded = this.store.replayCtfId || null;
+    return this.state ? { ...this.state, running: !!this.timer, loaded } : { running: false, loaded };
   }
 
   start(ctfId, speed = 10) {
@@ -22,6 +25,8 @@ class Replay {
     if (!rows.length) throw new Error('that CTF has no requests');
     const sp = Math.max(0.1, Math.min(Number(speed) || 10, 1000));
     this.state = { ctfId, speed: sp, total: rows.length, done: 0, startedAt: Date.now() };
+    this.store.reset();
+    this.store.replayCtfId = ctfId;
     const base = rows[0].ts;
     const now = Date.now();
     let i = 0;

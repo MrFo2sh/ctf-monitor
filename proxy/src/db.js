@@ -84,8 +84,10 @@ class Db {
     return ctf;
   }
   endCtf(id) {
+    if (!id) return;
     this.flush();
     this.db.prepare('UPDATE ctfs SET ended_at = ? WHERE id = ? AND ended_at IS NULL').run(Date.now(), id);
+    if (this.ctfId === id) this.ctfId = null; // nothing is recorded until a CTF is opened again
   }
   listCtfs() {
     return this.db
@@ -123,6 +125,7 @@ class Db {
 
   // ---------- requests (batched) ----------
   addRequest(ev) {
+    if (!(ev.ctfId || this.ctfId)) return; // no active CTF: live view only
     this.pending.push(ev);
     if (this.pending.length >= 500) this.flush();
     else if (!this.flushTimer) {
@@ -131,6 +134,7 @@ class Db {
     }
   }
   addAlert(a) {
+    if (!(a.ctfId || this.ctfId)) return;
     this.pendingAlerts.push(a);
     if (!this.flushTimer) {
       this.flushTimer = setTimeout(() => this.flush(), 200);

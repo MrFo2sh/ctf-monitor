@@ -43,8 +43,10 @@ const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, getTarget, setTarget, discoverTargets, getRawConfig }) {
+function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, stopCtf, getTarget, setTarget, discoverTargets, getRawConfig }) {
   bind = bind || '127.0.0.1';
+  // while the live view shows a replayed CTF, history views (alerts, student detail, query) read that CTF
+  const scopeCtf = (explicit) => (explicit ? Number(explicit) : store.replayCtfId || db.ctfId || undefined);
   const json = (res, status, obj) => {
     res.writeHead(status, { 'Content-Type': 'application/json', ...SECURITY_HEADERS });
     res.end(JSON.stringify(obj));
@@ -127,7 +129,8 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, g
       try {
         if (body.url) validateTarget(String(body.url)); // fail before touching anything
         let ctf = null;
-        if (body.newCtf) ctf = newCtf(NameGate.clean(body.ctfName) || undefined); // open the new record first so the switch is logged into it
+        // open the new record first so the switch is logged into it; a stopped CTF always needs a fresh record
+        if (body.url && (body.newCtf || !db.activeCtf())) ctf = newCtf(NameGate.clean(body.ctfName) || undefined);
         const t = setTarget(body.url ? String(body.url) : null, { label: body.label ? String(body.label).slice(0, 80) : undefined });
         return json(res, 200, { ok: true, target: t, ctf });
       } catch (err) {
@@ -144,7 +147,8 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, g
     if (url === '/api/alerts' && req.method === 'GET') {
       const level = qs.get('level') || undefined;
       const ack = qs.has('ack') ? Number(qs.get('ack')) : undefined;
-      const ctfId = qs.get('ctf') ? Number(qs.get('ctf')) : undefined;
+      const ctfId = scopeCtf(qs.get('ctf'));
+      if (!ctfId) return json(res, 200, []);
       db.flush();
       return json(res, 200, db.alerts({ ctfId, level, ack, limit: qs.get('limit') || 500 }).map((a) => ({ ...a, data: safeJson(a.data) })));
     }
@@ -163,7 +167,7 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, g
     if (url.startsWith('/api/students/')) {
       const name = decodeURIComponent(url.slice('/api/students/'.length));
       const live = store.students.get(name) || null;
-      const detail = db.studentDetail(name, qs.get('ctf') ? Number(qs.get('ctf')) : undefined);
+      const detail = db.studentDetail(name, scopeCtf(qs.get('ctf')) || 0);
       return json(res, 200, { ...detail, live: live ? { ...live, blocked: store.isBlocked(name), renamePending: store.renamePending(name) } : null });
     }
 
@@ -194,12 +198,16 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, g
       const body = await readJson(req).catch(() => ({}));
       return json(res, 200, { ok: true, ctf: newCtf(NameGate.clean(body.name) || undefined) });
     }
+    if (url === '/api/ctfs/stop' && req.method === 'POST') {
+      if (adminOnly()) return;
+      return json(res, 200, { ok: true, ended: stopCtf() });
+    }
 
     // ---- query
     if (url === '/api/query' && req.method === 'POST') {
       const body = await readJson(req).catch(() => ({}));
       try {
-        const q = compile(String(body.q || ''), { ctfId: body.ctf ? Number(body.ctf) : db.ctfId });
+        const q = compile(String(body.q || ''), { ctfId: scopeCtf(body.ctf) || 0 });
         const rows = db.runSql(q.sql, q.params, body.limit || 1000);
         return json(res, 200, { ok: true, rows, count: rows.length, sql: q.sql, params: q.params });
       } catch (err) {

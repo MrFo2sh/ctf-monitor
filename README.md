@@ -132,7 +132,9 @@ dot for details.
 Under each name: the IDs they are walking through (`orders: 1041 → 1042 → 1043`) or the attack
 class just seen. The right column has the searchable student list (green dot = active in the last
 two minutes), the selected student's card with IP addresses and actions, the alert feed, live
-stats (req/s, status codes, top endpoints, attack classes) and the leaderboard. The bottom panel
+stats (req/s, status codes, top endpoints, attack classes) and the leaderboard. The selected
+student's card also lists every user agent they used with counts and, when there are any, the
+attack classes seen from them with counts. The bottom panel
 is the request log with its own search; ⤢ makes it taller, ↗ opens it in a new tab.
 
 ### Alerts
@@ -178,9 +180,12 @@ another one in the drop-down or write `ctf = <id>`. Results can be downloaded as
 ### CTFs
 
 Every event ever recorded, with ⬇ export (a JSON file with requests, alerts and player identities).
-Admin only: ＋ New CTF (closes the current one, keeps its data), ⬆ import an export file,
-▶ replay any past or imported CTF into the Live tab at 1x to max speed, to review a past event or
-rehearse with a realistic feed. Also here: blocked players, blocked dashboard IPs, rename requests.
+Admin only: ■ Stop CTF (closes the record, disconnects the students, clears the live view; picking
+a CTF app again opens a new record), ＋ New CTF (closes the current one and opens the next),
+⬆ import an export file, ▶ replay any past or imported CTF into the Live tab at 1x to max speed,
+to review a past event or rehearse with a realistic feed. While a replay runs, the Alerts tab, the
+student detail pages and the Query tab read from the replayed CTF. Also here: blocked players,
+blocked dashboard IPs, rename requests.
 
 ## Organizer actions
 
