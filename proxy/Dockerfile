@@ -7,5 +7,6 @@ COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY src ./src
 COPY public ./public
+COPY mock ./mock
 # config, logs and data are mounted by docker-compose
 CMD ["node", "src/server.js"]

@@ -1,15 +1,23 @@
 'use strict';
 // Fake students. Sends realistic traffic THROUGH THE PROXY so the dashboard has something to show.
-//   node simulate.js            one round (~70 s) then exit
-//   node simulate.js --loop     rounds forever (what `./start.sh --demo` runs)
-//   TARGET=http://127.0.0.1:8888 node simulate.js
+// Started from the dashboard's Playground tab (or by hand):
+//   TARGET=http://127.0.0.1:8888 SIM_CONFIG='{"honest":4,"loop":true}' node simulate.js
+// SIM_CONFIG keys: honest (0-4), enumerator, sniper, noisy, anonymous, attacker (booleans),
+//                  loop (boolean), pace (1 = normal, 0.5 = twice as fast), rounds (0 = unlimited with loop)
 
 const http = require('http');
 
 const TARGET = new URL(process.env.TARGET || 'http://127.0.0.1:8888');
-const LOOP = process.argv.includes('--loop');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let CFG = { honest: 4, enumerator: true, sniper: true, noisy: true, anonymous: true, attacker: true, loop: process.argv.includes('--loop'), pace: 1, rounds: 0 };
+try {
+  CFG = { ...CFG, ...JSON.parse(process.env.SIM_CONFIG || '{}') };
+} catch {}
+const PACE = Math.max(0.1, Number(CFG.pace) || 1);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms * PACE));
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+let stopping = false;
+process.on('SIGTERM', () => { stopping = true; console.log('[sim] stopping'); setTimeout(() => process.exit(0), 300); });
+process.on('SIGINT', () => process.exit(0));
 
 class Student {
   constructor(name, ip) {
@@ -19,6 +27,7 @@ class Student {
     this.id = null;
   }
   req(method, path, body, headers = {}) {
+    if (stopping) return Promise.resolve({ status: 0, json: null });
     return new Promise((resolve) => {
       const data = body ? JSON.stringify(body) : null;
       const r = http.request(
@@ -61,6 +70,7 @@ class Student {
     return r;
   }
   async browseOwn(times = 3) {
+    if (!this.id) return;
     await this.req('GET', '/api/me');
     for (let i = 0; i < times; i++) {
       await this.req('GET', `/api/users/${this.id}`);
@@ -80,6 +90,7 @@ class Student {
 async function honest(s) {
   await s.login();
   await s.browseOwn(4);
+  if (!s.id) return;
   await s.req('GET', `/api/invoice?id=${s.order(0) + 6000}`);
   await s.req('GET', '/api/messages/' + (500 + ((s.id - 1001) % 8) + 8));
   await s.browseOwn(2);
@@ -157,40 +168,35 @@ async function anonymous(s) {
   await s.req('POST', '/login', { username: 'admin', password: '123456' });
 }
 
+const HONEST = ['alice', 'bob', 'grace', 'heidi'];
+
 async function round(n) {
   console.log(`[sim] round ${n} -> ${TARGET.origin}`);
   const S = (name, i) => new Student(name, `10.0.${n % 250}.${i}`);
-  const jobs = [
-    honest(S('alice', 1)),
-    honest(S('bob', 2)),
-    enumerator(S('carol', 3)),
-    sniper(S('dave', 4)),
-    noisy(S('eve', 5)),
-    (async () => {
-      await sleep(4000);
-      await honest(S('grace', 7));
-    })(),
-    (async () => {
-      await sleep(9000);
-      await honest(S('heidi', 8));
-    })(),
-    anonymous(S('frank', 6)),
-    attacker(S('mallory', 9)),
-  ];
+  const jobs = [];
+  HONEST.slice(0, CFG.honest).forEach((name, i) => jobs.push((async () => { await sleep(i * 3000); await honest(S(name, i + 1)); })()));
+  if (CFG.enumerator) jobs.push(enumerator(S('carol', 3)));
+  if (CFG.sniper) jobs.push(sniper(S('dave', 4)));
+  if (CFG.noisy) jobs.push(noisy(S('eve', 5)));
+  if (CFG.anonymous) jobs.push(anonymous(S('frank', 6)));
+  if (CFG.attacker) jobs.push(attacker(S('mallory', 9)));
   await Promise.all(jobs);
   console.log(`[sim] round ${n} done`);
 }
 
 (async () => {
-  // wait for the proxy to be up
-  for (let i = 0; i < 60; i++) {
+  console.log(`[sim] config ${JSON.stringify(CFG)}`);
+  for (let i = 0; i < 60 && !stopping; i++) {
     const r = await new Student('probe', '10.0.0.250').req('GET', '/health');
     if (r.status) break;
+    if (i === 0) console.log('[sim] waiting for the proxy to answer...');
     await sleep(1000);
   }
   let n = 1;
   do {
     await round(n++);
-    if (LOOP) await sleep(10000);
-  } while (LOOP);
+    if (CFG.rounds && n > CFG.rounds) break;
+    if (CFG.loop && !stopping) await sleep(10000);
+  } while (CFG.loop && !stopping);
+  console.log('[sim] finished');
 })();

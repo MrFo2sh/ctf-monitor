@@ -1,8 +1,9 @@
 name: ctf-watch
 
-# All services share the VM's network (network_mode: host) so that:
+# The monitor shares the VM's network (network_mode: host) so that:
 #  - the proxy can reach the CTF container on 127.0.0.1:<port>
 #  - the dashboard is bound to 127.0.0.1 by default (not reachable from outside / zrok)
+# The mock playground (fake CTF app + fake students) runs inside this same container, from the dashboard.
 
 services:
   monitor:
@@ -23,7 +24,6 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       NAME_GATE: ${NAME_GATE:-0}
       NAME_GATE_TITLE: ${NAME_GATE_TITLE:-Welcome to the CTF}
-      DEMO: ${DEMO:-0}
       CONFIG_DIR: /app/config
       LOG_DIR: /app/logs
       DATA_DIR: /app/data
@@ -40,27 +40,3 @@ services:
       interval: 15s
       timeout: 3s
       retries: 3
-
-  # ---- demo only (./start.sh --demo) ----
-  mock-ctf:
-    profiles: ["demo"]
-    build: ./demo/mock-ctf
-    image: ctf-watch-mock-ctf
-    container_name: ctf-watch-mock-ctf
-    network_mode: host
-    environment:
-      PORT: ${MOCK_PORT:-3999}
-    mem_limit: 64m
-
-  simulator:
-    profiles: ["demo"]
-    build: ./demo/simulator
-    image: ctf-watch-simulator
-    container_name: ctf-watch-simulator
-    network_mode: host
-    environment:
-      TARGET: http://127.0.0.1:${PROXY_PORT:-8888}
-    depends_on:
-      - monitor
-      - mock-ctf
-    mem_limit: 64m

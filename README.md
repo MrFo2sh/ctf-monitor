@@ -66,10 +66,10 @@ the step entirely, set `CTF_TARGET=http://127.0.0.1:<port>` in `.env`.
 ### Docker Desktop (Windows / macOS laptop)
 
 `start.sh` detects Docker Desktop and adds `docker-compose.desktop.yml` automatically: the
-containers get their own bridge network and the dashboard and proxy are published on
+container gets its own bridge network and the dashboard and proxy are published on
 `127.0.0.1` of your machine. The CTFs tab then lists other containers by name and anything
 answering on the usual development ports of your machine (`host.docker.internal`). Everything else
-is identical. This is handy to try the demo on a laptop; the event itself runs on the Linux VM.
+is identical. This is handy to try the Playground on a laptop; the event itself runs on the Linux VM.
 
 ## 3. Log in to the dashboard
 
@@ -101,14 +101,16 @@ The dashboard is bound to `127.0.0.1` by default. Because it has a login you may
 
 This also stops the zrok share. Everything recorded stays in `data/` and `logs/`.
 
-## 5. Try it first (demo mode)
+## 5. Try it first (Playground tab)
 
-```bash
-./start.sh --demo
-```
-
-A fake CTF and nine fake students play: honest ones, an enumerator, a data thief, a noisy one,
-an anonymous scanner and one throwing injection payloads. Stop with `./stop.sh`.
+Start normally, log in as admin and open the **Playground** tab. "▶ Start everything" launches a
+fake CTF app inside the monitor, points the proxy at it in a fresh CTF record named `playground`,
+and starts nine fake students: honest ones, an enumerator, a data thief, a noisy one, an
+anonymous scanner and one throwing injection payloads. Watch the Live tab fill up, then
+"■ Stop everything". The tab also lets you run the pieces separately: start or stop the mock app
+on a port of your choice, point the proxy at it, and start the fake students with your own mix
+of personas, pace, number of rounds, looping, or a different destination. A "MOCK TRAFFIC" badge
+shows in the header while fake students are playing.
 
 ---
 
@@ -227,13 +229,13 @@ CTF app (containers, ports, routes, cookie names); send it to whoever maintains 
 
 ```
 start.sh / stop.sh / inspect.sh
-docker-compose.yml          monitor (+ demo app and fake students)
+docker-compose.yml          the monitor (docker-compose.desktop.yml: Docker Desktop override)
 config/rules.json           detection rules
 data/ctf-watch.db           SQLite database: CTFs, players, requests, alerts, accounts (not in git)
 logs/events-<date>.jsonl    one JSON line per request
 logs/credentials.txt        this start's dashboard accounts (mode 600)
-proxy/                      Node.js source (one dependency: ws); `npm test` runs the unit tests
-demo/                       fake CTF, simulator, load test
+proxy/src                   Node.js source (one dependency: ws); `npm test` runs the unit tests
+proxy/mock                  the Playground's fake CTF app, fake students, and the load test
 ```
 
 ## Performance and limits
@@ -247,7 +249,7 @@ being hammered (40 to 60 MB in normal use) and 22 MB of database per 100,000 req
 your own VM with:
 
 ```bash
-node demo/loadtest.js --seconds 10 --concurrency 50     # against ./start.sh --demo only
+node proxy/mock/loadtest.js --seconds 10 --concurrency 50     # with the Playground mock app behind the proxy, never the real CTF
 ```
 
 No Redis and no load balancer are used, on purpose: for one CTF of up to a few hundred students

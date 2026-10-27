@@ -11,7 +11,7 @@ const { validateTarget } = require('./ports');
 const { log, clientIp } = require('./util');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const PAGES = new Set(['/', '/live', '/alerts', '/students', '/query', '/requests', '/admin', '/ctfs']);
+const PAGES = new Set(['/', '/live', '/alerts', '/students', '/query', '/requests', '/admin', '/ctfs', '/playground']);
 const CSRF_HEADER = 'x-requested-with';
 
 function readBody(req, limit) {
@@ -43,7 +43,7 @@ const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
+function createDashboard({ port, bind, store, admin, auth, db, replay, playground, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
   bind = bind || '127.0.0.1';
   // while the live view shows a replayed CTF, history views (alerts, student detail, query) read that CTF
   const scopeCtf = (explicit) => (explicit ? Number(explicit) : store.replayCtfId || db.ctfId || undefined);
@@ -236,6 +236,34 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, s
         return json(res, 400, { error: err.message });
       }
     }
+    // ---- mock playground (fake CTF app + fake students, run as child processes of the monitor)
+    if (url === '/api/playground' && req.method === 'GET') return json(res, 200, playground.status());
+    if (url.startsWith('/api/playground/') && req.method === 'POST') {
+      if (adminOnly()) return;
+      const body = await readJson(req).catch(() => ({}));
+      try {
+        switch (url) {
+          case '/api/playground/mock': return json(res, 200, { ok: true, ...(body.action === 'stop' ? playground.stopMock() : playground.startMock({ port: body.port })) });
+          case '/api/playground/sim': return json(res, 200, { ok: true, ...(body.action === 'stop' ? playground.stopSim() : playground.startSim(body.config || {})) });
+          case '/api/playground/quick': {
+            // one click: mock app up, proxy pointed at it in a fresh CTF record, students playing
+            if (!playground.mock.running()) playground.startMock({ port: body.port });
+            await new Promise((r) => setTimeout(r, 600));
+            newCtf(NameGate.clean(body.ctfName) || 'playground');
+            setTarget(playground.mockUrl(), { label: 'mock CTF app' });
+            if (!playground.sim.running()) playground.startSim(body.config || {});
+            return json(res, 200, { ok: true, ...playground.status(), target: getTarget() });
+          }
+          case '/api/playground/stop-all':
+            playground.stopAll();
+            return json(res, 200, { ok: true, ...playground.status() });
+          default: return json(res, 404, { error: 'unknown action' });
+        }
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+
     if (url === '/api/replay' && req.method === 'GET') return json(res, 200, replay.status());
     if (url === '/api/replay' && req.method === 'POST') {
       if (adminOnly()) return;
@@ -290,7 +318,7 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, newCtf, s
     if (alert) broadcast({ type: 'alert', alert });
   });
   store.onReset(() => wss.clients.size && broadcast({ type: 'snapshot', ...store.snapshot() }));
-  const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status(), target: getTarget() }), 1000);
+  const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status(), target: getTarget(), mock: { app: playground.mock.running(), sim: playground.sim.running() } }), 1000);
   statsTimer.unref();
 
   server.listen(port, bind, () => log('info', `dashboard on http://${bind}:${port}${bind === '127.0.0.1' ? '  (local only)' : ''}`));

@@ -29,9 +29,8 @@ function pathTemplate(p) {
 }
 
 class Store {
-  constructor({ logDir, demo, db }) {
+  constructor({ logDir, db }) {
     this.logDir = logDir;
-    this.demo = !!demo;
     this.db = db || null;
     this.listeners = new Set();
     this.resetListeners = new Set();
@@ -280,7 +279,7 @@ class Store {
       mostAttacks: students.map((s) => ({ student: s.name, value: Object.values(s.attacks).reduce((a, b) => a + b, 0) })).filter((x) => x.value > 0).sort((a, b) => b.value - a.value).slice(0, 5),
     };
     return {
-      demo: this.demo, startedAt: this.startedAt, uptimeSec: Math.round((Date.now() - this.startedAt) / 1000), total: this.total,
+      startedAt: this.startedAt, uptimeSec: Math.round((Date.now() - this.startedAt) / 1000), total: this.total,
       rps: last60, rpsNow: last10.reduce((a, b) => a + b, 0) / 10, statusClasses: classes, byStatus: this.byStatus, topEndpoints,
       attackTotals: this.attackTotals, students, leaderboard: lb, alertsTotal: this.alerts.length, alertsByLevel: byLevel, alertsUnacked: unacked,
     };

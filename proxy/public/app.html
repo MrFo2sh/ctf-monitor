@@ -116,13 +116,14 @@
 </head>
 <body>
 <header>
-  <div class="brand"><span class="live" id="live"></span> CTF Watch <span class="badge demo hidden" id="demo-badge">DEMO</span><span class="badge replay hidden" id="replay-badge">REPLAY</span></div>
+  <div class="brand"><span class="live" id="live"></span> CTF Watch <span class="badge demo hidden" id="demo-badge" title="fake students are playing (Playground tab)">MOCK TRAFFIC</span><span class="badge replay hidden" id="replay-badge">REPLAY</span></div>
   <nav id="nav">
     <button data-view="live">Live</button>
     <button data-view="alerts">Alerts <span class="cnt hidden" id="nav-alerts"></span></button>
     <button data-view="students">Students</button>
     <button data-view="query">Query</button>
     <button data-view="ctfs">CTFs</button>
+    <button data-view="playground">Playground <span class="cnt hidden" id="nav-mock" style="background:var(--warn)">●</span></button>
   </nav>
   <div class="spacer"></div>
   <div class="kpi"><b id="k-rps">0.0</b><span>req/s</span></div>
@@ -145,7 +146,7 @@
       <button id="pause">⏸ Pause</button>
       <button class="small" data-open="/live" title="Open in a new tab">↗</button>
     </div>
-    <div class="empty" id="empty">Waiting for traffic…<br><br>Send students to the proxy port, or run <code>./start.sh --demo</code>.</div>
+    <div class="empty" id="empty">Waiting for traffic…<br><br>Send students to the proxy port, or start fake ones from the <a href="/playground">Playground</a> tab.</div>
   </section>
   <aside>
     <div class="panel">
@@ -304,6 +305,53 @@
     </div>
   </div>
 </section>
+<!-- ============================ PLAYGROUND ============================ -->
+<section class="view" id="view-playground">
+  <div class="view-head"><h2>Mock playground</h2><span style="color:var(--muted);font-size:11px">a fake CTF app and fake students, to see the dashboard working without a real event</span><div class="spacer"></div><button class="small" data-open="/playground">↗</button></div>
+  <div class="view-body cols">
+    <div class="card wide">
+      <h3>Quick demo <span><button class="primary small admin-only" id="pg-quick">▶ Start everything</button> <button class="small danger admin-only" id="pg-stop-all">■ Stop everything</button></span></h3>
+      <p style="margin:0;color:var(--muted);font-size:12px">Starts the mock CTF app, points the proxy at it in a fresh CTF record named <code>playground</code>, and starts the fake students. Stop everything ends the fake traffic and the mock app (the proxy stays pointed at it until you pick another target or stop the CTF).</p>
+    </div>
+    <div class="card">
+      <h3>Mock CTF app <span id="pg-mock-state" class="badge">stopped</span></h3>
+      <p style="margin:0 0 8px;color:var(--muted);font-size:12px">A small shop with deliberate IDOR bugs: nine accounts (alice, bob, carol, dave, eve, frank, grace, heidi, mallory, password <code>password</code>), profiles, orders, invoices and messages without ownership checks.</p>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap" class="admin-only">
+        <label>port <input id="pg-mock-port" type="number" min="1024" max="65535" value="3999" style="width:90px"></label>
+        <button class="small" id="pg-mock-start">▶ Start</button>
+        <button class="small danger" id="pg-mock-stop">■ Stop</button>
+        <button class="small" id="pg-mock-use">🎯 Point proxy here</button>
+      </div>
+      <div class="grid2" id="pg-mock-info" style="margin-top:8px"></div>
+      <pre class="sql" id="pg-mock-log" style="max-height:120px"></pre>
+    </div>
+    <div class="card">
+      <h3>Fake students <span id="pg-sim-state" class="badge">stopped</span></h3>
+      <div class="admin-only">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center;font-size:12px">
+          <span class="k" style="color:var(--muted)">honest players</span><span><input id="pg-honest" type="number" min="0" max="4" value="4" style="width:70px"> <span style="color:var(--faint)">(alice, bob, grace, heidi)</span></span>
+          <span class="k" style="color:var(--muted)">attackers</span>
+          <span style="display:flex;gap:10px;flex-wrap:wrap">
+            <label><input type="checkbox" id="pg-enumerator" checked> carol: enumerates IDs</label>
+            <label><input type="checkbox" id="pg-sniper" checked> dave: targeted IDOR</label>
+            <label><input type="checkbox" id="pg-noisy" checked> eve: 404 bursts</label>
+            <label><input type="checkbox" id="pg-anonymous" checked> frank: no login, scans</label>
+            <label><input type="checkbox" id="pg-attacker" checked> mallory: injection payloads</label>
+          </span>
+          <span class="k" style="color:var(--muted)">pace</span><span><select id="pg-pace"><option value="0.25">4x faster</option><option value="0.5">2x faster</option><option value="1" selected>normal</option><option value="2">2x slower</option></select></span>
+          <span class="k" style="color:var(--muted)">rounds</span><span><input id="pg-rounds" type="number" min="0" max="1000" value="0" style="width:70px"> <label style="margin-left:8px"><input type="checkbox" id="pg-loop" checked> keep looping</label> <span style="color:var(--faint)">(0 = unlimited while looping; one round is about 75 s)</span></span>
+          <span class="k" style="color:var(--muted)">send to</span><span><input id="pg-target" placeholder="the proxy (default)" style="width:260px;font-family:var(--mono)"></span>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button class="small" id="pg-sim-start">▶ Start</button>
+          <button class="small danger" id="pg-sim-stop">■ Stop</button>
+        </div>
+      </div>
+      <div class="grid2" id="pg-sim-info" style="margin-top:8px"></div>
+      <pre class="sql" id="pg-sim-log" style="max-height:160px"></pre>
+    </div>
+  </div>
+</section>
 </main>
 <div id="tip"></div>
 
@@ -333,7 +381,7 @@
   const tryApi = (p, b, m) => api(p, b, m).catch((e) => { alert(e.message); return null; });
 
   // ---------- routing ----------
-  const VIEWS = ['live', 'alerts', 'students', 'query', 'ctfs'];
+  const VIEWS = ['live', 'alerts', 'students', 'query', 'ctfs', 'playground'];
   function viewFromPath(p) {
     if (p.startsWith('/students')) return 'students';
     if (p === '/requests') return 'live';
@@ -349,6 +397,7 @@
     if (v === 'students') renderStudentsTable();
     if (v === 'ctfs') { loadCtfs(); scanTargets(); }
     if (v === 'query') loadCtfOptions();
+    if (v === 'playground') loadPlayground();
   }
   $('nav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) showView(b.dataset.view, true); });
   window.addEventListener('popstate', () => showView(viewFromPath(location.pathname)));
@@ -428,7 +477,6 @@
     $('k-rps').textContent = st.rpsNow.toFixed(1); $('s-rps').textContent = st.rpsNow.toFixed(1); $('k-total').textContent = st.total; $('k-students').textContent = st.students.length;
     $('k-alerts').textContent = st.alertsUnacked; $('nav-alerts').textContent = st.alertsUnacked; $('nav-alerts').classList.toggle('hidden', !st.alertsUnacked);
     $('alerts-count').textContent = `${st.alertsTotal} total`;
-    $('demo-badge').classList.toggle('hidden', !st.demo);
     const up = st.uptimeSec; $('uptime').textContent = `up ${Math.floor(up / 3600)}h ${Math.floor((up % 3600) / 60)}m`;
     const cv = $('spark'), ctx = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
     const W = cv.width = (cv.clientWidth || 340) * dpr, H = cv.height = 44 * dpr; ctx.clearRect(0, 0, W, H);
@@ -674,11 +722,46 @@
     $('replay-status').textContent = running ? `replaying CTF #${r.ctfId} at ${r.speed}x: ${r.done}/${r.total}` : loaded ? `live view shows replayed CTF #${r.loaded}; alerts, student pages and queries read it too. Stop CTF or New CTF to go back live.` : '';
   }
 
+  // ---------- playground ----------
+  let pgTimer = null;
+  function simConfig() {
+    return { honest: Number($('pg-honest').value), enumerator: $('pg-enumerator').checked, sniper: $('pg-sniper').checked, noisy: $('pg-noisy').checked, anonymous: $('pg-anonymous').checked, attacker: $('pg-attacker').checked,
+      pace: Number($('pg-pace').value), rounds: Number($('pg-rounds').value), loop: $('pg-loop').checked, target: $('pg-target').value.trim() || undefined };
+  }
+  function renderPlayground(p) {
+    if (!p) return;
+    const m = p.mock, s = p.sim;
+    $('pg-mock-state').textContent = m.running ? 'running' : 'stopped'; $('pg-mock-state').style.color = m.running ? 'var(--good)' : 'var(--muted)';
+    $('pg-sim-state').textContent = s.running ? 'running' : 'stopped'; $('pg-sim-state').style.color = s.running ? 'var(--good)' : 'var(--muted)';
+    $('pg-mock-info').innerHTML = [['address', m.url], ['status', m.running ? `running since ${fmtTime(m.startedAt)} (pid ${m.pid})` : m.lastExit ? `exited ${fmtTime(m.lastExit.at)}` : 'not started'], ['proxy points here', getCurrentTarget() === m.url ? 'yes' : 'no']].map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span>`).join('');
+    $('pg-mock-log').textContent = m.log.join('\n') || '(no output yet)';
+    const c = s.config || {};
+    $('pg-sim-info').innerHTML = [['status', s.running ? `running since ${fmtTime(s.startedAt)}` : s.lastExit ? `finished ${fmtTime(s.lastExit.at)}` : 'not started'], ['sending to', c.target || '–'], ['players', s.config ? `${c.honest} honest${['enumerator', 'sniper', 'noisy', 'anonymous', 'attacker'].filter((k) => c[k]).map((k) => ' + ' + k).join('')}` : '–'], ['pace / rounds', s.config ? `${c.pace}x · ${c.rounds || 'unlimited'}${c.loop ? ', looping' : ''}` : '–']].map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span>`).join('');
+    $('pg-sim-log').textContent = s.log.join('\n') || '(no output yet)';
+    if (!m.running && $('pg-mock-port').value === '' ) $('pg-mock-port').value = m.port;
+    $('pg-mock-use').disabled = !m.running; $('pg-mock-stop').disabled = !m.running; $('pg-mock-start').disabled = m.running; $('pg-sim-stop').disabled = !s.running; $('pg-sim-start').disabled = s.running;
+  }
+  let currentTarget = null; function getCurrentTarget() { return currentTarget; }
+  async function loadPlayground() { const p = await tryApi('/api/playground'); renderPlayground(p); clearInterval(pgTimer); pgTimer = setInterval(async () => { if (state.view !== 'playground') return clearInterval(pgTimer); renderPlayground(await api('/api/playground').catch(() => null)); }, 2000); }
+  const pg = async (path, body) => { const j = await tryApi(path, body || {}); if (j) renderPlayground(j); return j; };
+  $('pg-mock-start').addEventListener('click', () => pg('/api/playground/mock', { action: 'start', port: Number($('pg-mock-port').value) }));
+  $('pg-mock-stop').addEventListener('click', () => pg('/api/playground/mock', { action: 'stop' }));
+  $('pg-mock-use').addEventListener('click', async () => { const p = await api('/api/playground'); await useTarget(p.mock.url, 'mock CTF app'); loadPlayground(); });
+  $('pg-sim-start').addEventListener('click', () => pg('/api/playground/sim', { action: 'start', config: simConfig() }));
+  $('pg-sim-stop').addEventListener('click', () => pg('/api/playground/sim', { action: 'stop' }));
+  $('pg-quick').addEventListener('click', async () => { if (!confirm('Start the mock app, point the proxy at it in a new CTF record "playground", and start the fake students?')) return; const j = await pg('/api/playground/quick', { port: Number($('pg-mock-port').value), config: simConfig() }); if (j) { renderTarget(j.target); showView('live', true); } });
+  $('pg-stop-all').addEventListener('click', () => pg('/api/playground/stop-all'));
+
   // ---------- websocket ----------
   function handleMessage(m, live) {
     if (m.type === 'event') { addDot(m.event, live); addRow(m.event); }
     else if (m.type === 'alert') { addFeedAlert(m.alert, live); state.alerts.unshift(m.alert); if (state.view === 'alerts') { renderLevelChips(); renderAlertsTable(); } }
-    else if (m.type === 'stats') { renderStats(m.stats); renderReplay(m.replay); if (m.target !== undefined && $('tg-manual') !== document.activeElement) renderTarget(m.target); if (state.view === 'alerts') renderLevelChips(); }
+    else if (m.type === 'stats') {
+      renderStats(m.stats); renderReplay(m.replay);
+      if (m.target !== undefined) { currentTarget = m.target; if ($('tg-manual') !== document.activeElement) renderTarget(m.target); }
+      if (m.mock) { $('demo-badge').classList.toggle('hidden', !m.mock.sim); $('nav-mock').classList.toggle('hidden', !(m.mock.app || m.mock.sim)); }
+      if (state.view === 'alerts') renderLevelChips();
+    }
   }
   function loadSnapshot(s) {
     if (state.serverStart && s.stats.startedAt && s.stats.startedAt !== state.serverStart) { location.reload(); return; }
@@ -703,7 +786,7 @@
     const me = await api('/api/me').catch(() => null); if (!me) return;
     state.me = me; $('me').textContent = `${me.username} (${me.role})`; $('ctf-name').textContent = me.ctf ? me.ctf.name : 'no active CTF';
     if (me.role !== 'admin') document.querySelectorAll('.admin-only').forEach((el) => el.classList.add('hidden'));
-    renderReplay(me.replay); renderTarget(me.target);
+    renderReplay(me.replay); renderTarget(me.target); currentTarget = me.target;
     const p = location.pathname; showView(viewFromPath(p), false);
     if (!me.target && me.role === 'admin' && viewFromPath(p) === 'live') showView('ctfs', true); // nothing connected yet: start on the picker
     if (p.startsWith('/students/')) openStudentDetail(decodeURIComponent(p.slice('/students/'.length)), false);

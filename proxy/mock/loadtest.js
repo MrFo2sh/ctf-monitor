@@ -1,7 +1,7 @@
 'use strict';
 // Quick throughput check: hammers the proxy with concurrent requests and prints req/s and latency.
-//   node demo/loadtest.js [--target http://127.0.0.1:8888] [--seconds 10] [--concurrency 50]
-// Run it against a demo setup (./start.sh --demo) - never against the real CTF during the event.
+//   node proxy/mock/loadtest.js [--target http://127.0.0.1:8888] [--seconds 10] [--concurrency 50]
+// Run it with the Playground's mock app behind the proxy - never against the real CTF during the event.
 
 const http = require('http');
 

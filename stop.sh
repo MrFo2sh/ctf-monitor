@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stops ctf-watch (and the demo, if it was running). Logs in ./logs are kept.
+# Stops ctf-watch. Logs in ./logs and the database in ./data are kept.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -26,7 +26,7 @@ fi
 pkill -f "zrok2? share .*${PROXY_PORT:-8888}" 2>/dev/null || true
 rm -f logs/zrok.url
 
-$COMPOSE --profile demo down --remove-orphans
+$COMPOSE down --remove-orphans
 echo
 echo "ctf-watch stopped. Logs are still in ./logs/"
 echo "The zrok share is stopped too, so students cannot reach the CTF until you run ./start.sh again"

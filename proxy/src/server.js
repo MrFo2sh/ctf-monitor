@@ -12,6 +12,7 @@ const { Auth } = require('./auth');
 const { Admin } = require('./admin');
 const { NameGate } = require('./namegate');
 const { Replay } = require('./replay');
+const { Playground } = require('./playground');
 const { classify, worstLevel } = require('./attacks');
 const { createProxy } = require('./proxy');
 const { discover, validateTarget } = require('./ports');
@@ -33,7 +34,6 @@ const LOG_DIR = env('LOG_DIR', path.join(__dirname, '..', '..', 'logs'));
 const DATA_DIR = env('DATA_DIR', path.join(__dirname, '..', '..', 'data'));
 const DB_FILE = env('DB_FILE', path.join(DATA_DIR, 'ctf-watch.db'));
 const CTF_NAME = env('CTF_NAME', '');
-const DEMO = flag('DEMO');
 const NAME_GATE = flag('NAME_GATE');
 
 // ---------------------------------------------------------------- core objects
@@ -44,9 +44,10 @@ const ctf = db.openCtf(CTF_NAME || undefined);
 const gate = NAME_GATE ? new NameGate({ secretFile: path.join(DATA_DIR, '.name-gate-secret'), cookie: env('NAME_GATE_COOKIE', 'ctfw_name'), title: env('NAME_GATE_TITLE', 'Welcome to the CTF') }) : null;
 const identity = new IdentityResolver(getConfig, gate);
 const detector = new Detector(getConfig);
-const store = new Store({ logDir: LOG_DIR, demo: DEMO, db });
+const store = new Store({ logDir: LOG_DIR, db });
 const admin = new Admin({ db, store, detector, gate });
 const replay = new Replay({ db, store });
+const playground = new Playground({ proxyPort: PROXY_PORT });
 store.isBlocked = (name) => !!admin.state.blocked[name];
 store.renamePending = (name) => admin.isRenamePending(name);
 
@@ -231,7 +232,7 @@ function studentLink() {
       if (m) return { url: `https://${m[2]}`, source: 'zrok.log', since: st.mtimeMs };
     }
   } catch {}
-  return { url: null, source: null, hint: DEMO ? 'demo mode does not start zrok' : `no zrok share seen; run: zrok2 share public ${PROXY_PORT}` };
+  return { url: null, source: null, hint: `no zrok share seen (start.sh starts one on the VM; by hand: zrok2 share public ${PROXY_PORT})` };
 }
 
 // ---------------------------------------------------------------- lifecycle
@@ -263,13 +264,14 @@ function stopCtf() {
 }
 
 createProxy({ getTarget, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
-createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
+createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
 
-log('info', `ctf-watch v2.1 started${DEMO ? ' (DEMO MODE)' : ''}${NAME_GATE ? ' (name gate ON)' : ''}. ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
+log('info', `ctf-watch v2.1 started${NAME_GATE ? ' (name gate ON)' : ''}. ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
 
 function shutdown() {
   log('info', 'shutting down');
   try {
+    playground.stopAll();
     db.close();
   } catch {}
   process.exit(0);

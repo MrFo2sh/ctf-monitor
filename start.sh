@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# Starts ctf-watch.   Usage:  ./start.sh          (monitor the real CTF)
-#                            ./start.sh --demo   (fake CTF + fake students, to see how it looks)
+# Starts ctf-watch.   Usage:  ./start.sh
+# (To try it without a real CTF: log in to the dashboard and use the Playground tab.)
 set -euo pipefail
 cd "$(dirname "$0")"
 
-DEMO=0
 for a in "$@"; do
   case "$a" in
-    --demo) DEMO=1 ;;
     -h|--help) sed -n 2,3p "$0"; exit 0 ;;
+    --demo) echo "The --demo flag is gone: start normally, then use the Playground tab in the dashboard."; exit 1 ;;
   esac
 done
 
@@ -58,20 +57,9 @@ fi
 load_env .env
 PROXY_PORT="${PROXY_PORT:-8888}"; DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"; PROXY_BIND="${PROXY_BIND:-127.0.0.1}"
 
-PROFILE=""
-if [ "$DEMO" = "1" ]; then
-  export DEMO=1 MOCK_PORT="${MOCK_PORT:-3999}"
-  if [ "$DESKTOP" = "1" ]; then export CTF_TARGET="http://ctf-watch-mock-ctf:$MOCK_PORT"; else export CTF_TARGET="http://127.0.0.1:$MOCK_PORT"; fi
-  PROFILE="--profile demo"
-  say "DEMO MODE: a fake CTF app + fake students will be started. No real CTF is touched."
-else
-  export DEMO=0
-fi
-
 # ---------------------------------------------------------------- 3. start
 say "Building and starting (first time takes a minute)..."
-# shellcheck disable=SC2086
-$COMPOSE $PROFILE up -d --build --remove-orphans
+$COMPOSE up -d --build --remove-orphans
 
 say "Waiting for the dashboard..."
 ok=0
@@ -85,7 +73,7 @@ done
 # ---------------------------------------------------------------- 4. zrok
 ZROK_URL=""
 ZROK_NOTE=""
-if [ "$DEMO" = "0" ] && [ "${ZROK_AUTO:-1}" = "1" ]; then
+if [ "${ZROK_AUTO:-1}" = "1" ]; then
   # zrok is set up for the normal user; if we were re-run with sudo, run zrok as that user
   ZROK_AS=()
   if [ -n "${SUDO_USER:-}" ] && [ "$(id -u)" -eq 0 ]; then ZROK_AS=(sudo -u "$SUDO_USER" -H); fi
@@ -187,10 +175,9 @@ fi
 echo "  Logs:                           $(pwd)/logs/"
 if [ "${NAME_GATE:-0}" = "1" ]; then echo "  Name gate:                      ON - students are asked for their name on first visit"; fi
 echo
-if [ "$DEMO" = "1" ]; then
-  echo "  Fake students are now playing. Open the dashboard and watch."
-  echo "  Stop with:  ./stop.sh"
-elif [ -n "$ZROK_URL" ]; then
+echo "  No real CTF yet? Log in and open the Playground tab for a fake CTF app with fake students."
+echo
+if [ -n "$ZROK_URL" ]; then
   printf '  \033[1;32mGIVE THIS LINK TO THE STUDENTS:\033[0m\n\n      %s\n\n' "$ZROK_URL"
   echo "  zrok is running in the background (log: logs/zrok.log). ./stop.sh stops it together with the monitor."
 elif [ -n "$ZROK_NOTE" ]; then

@@ -1,9 +1,9 @@
 # Override for Docker Desktop (Windows / macOS), where "network_mode: host" stays inside Docker's
-# Linux VM and nothing would reach your browser. Here the containers share a named bridge network
-# (so they can find each other by name) with ports published on 127.0.0.1 of your machine.
+# Linux VM and nothing would reach your browser. Here the container is on a named bridge network
+# with the dashboard and proxy published on 127.0.0.1 of your machine.
 # start.sh picks this file automatically on Desktop. On the Ubuntu VM this file is NOT used.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.desktop.yml [--profile demo] up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.desktop.yml up -d --build
 
 networks:
   ctfnet:
@@ -20,18 +20,5 @@ services:
       PROXY_BIND: 0.0.0.0
       # discovery lists containers by their network ip, and probes common ports on your machine via host.docker.internal
       DISCOVERY_MODE: bridge
-      CTF_TARGET: ${CTF_TARGET:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-  mock-ctf:
-    network_mode: !reset null
-    networks: [ctfnet]
-    environment:
-      HOST: 0.0.0.0
-
-  simulator:
-    network_mode: !reset null
-    networks: [ctfnet]
-    environment:
-      TARGET: http://ctf-watch:${PROXY_PORT:-8888}
