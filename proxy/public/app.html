@@ -55,10 +55,14 @@
   .flag.blocked { color:var(--muted); border-color:var(--muted) } .flag.attack { color:var(--high); border-color:var(--high); background:rgba(236,131,90,.12) }
   .chip { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:12px; border:1px solid var(--border); cursor:pointer; font-size:11px; color:var(--muted) }
   .chip.on { border-color:var(--accent); color:var(--text); background:rgba(57,135,229,.12) } .chip b { font-family:var(--mono) }
-  .card { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:12px 14px; margin-bottom:12px }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:12px 14px; margin-bottom:12px; min-width:0; overflow-x:auto }
+  .card.wide { grid-column:1 / -1 } @media (min-width:1100px) { .card.wide { grid-column:span 2 } }
+  .card .wrapline { overflow-wrap:anywhere; white-space:normal }
+  .card .wrapline code { margin-right:6px; display:inline-block }
   .card h3 { margin:0 0 8px; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:600; display:flex; justify-content:space-between; align-items:center }
   .grid2 { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; font-size:12px } .grid2 .k { color:var(--muted) } .grid2 .v { font-family:var(--mono) }
-  .cols { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px }
+  .cols { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap:12px; align-items:start }
+  .cols > * { min-width:0 }
   .empty { color:var(--faint); text-align:center; padding:50px 20px; font-size:14px } .empty code { font-family:var(--mono); color:var(--muted) }
   textarea.q { width:100%; min-height:64px; font-family:var(--mono); font-size:13px; resize:vertical }
   pre.sql { font-family:var(--mono); font-size:11px; color:var(--muted); background:var(--panel-2); padding:6px 8px; border-radius:4px; overflow:auto; margin:6px 0 }
@@ -252,7 +256,7 @@
 <section class="view" id="view-ctfs">
   <div class="view-head"><h2>CTFs &amp; admin</h2><div class="spacer"></div><button class="small" data-open="/ctfs">↗</button></div>
   <div class="view-body cols">
-    <div class="card">
+    <div class="card wide">
       <h3>Events <span><button class="small admin-only" id="ctf-new">＋ New CTF</button></span></h3>
       <table><thead><tr><th>#</th><th>name</th><th>started</th><th>ended</th><th>students</th><th>requests</th><th>alerts</th><th></th></tr></thead><tbody id="ctf-rows"></tbody></table>
       <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap" class="admin-only">
@@ -526,8 +530,8 @@
       <div class="cols">
         <div class="card"><h3>Profile</h3><div class="grid2">${[['identified by', l.source], ['app username', (l.appNames || []).join(', ') || '–'], ['user id', l.id || '–'], ['player #', d.playerId || '–'], ['first seen', fmtDate(l.firstSeen)], ['last seen', fmtDate(l.lastSeen)], ['requests', `${l.requests ?? d.requests.length} (${l.failed ?? '?'} failed)`], ['IDOR', `${l.idorAttempts ?? 0} attempts · ${l.idorSuccess ?? 0} successful`]].map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span>`).join('')}</div></div>
         <div class="card"><h3>IP addresses</h3><table><thead><tr><th>ip</th><th>requests</th><th>first</th><th>last</th></tr></thead><tbody>${d.ips.map((i) => `<tr><td>${esc(i.ip)}</td><td>${i.n}</td><td>${fmtTime(i.first)}</td><td>${fmtTime(i.last)}</td></tr>`).join('')}</tbody></table></div>
-        <div class="card"><h3>User agents</h3><table><thead><tr><th>user agent</th><th>requests</th></tr></thead><tbody>${d.userAgents.map((u) => `<tr><td class="wrap">${esc(u.ua || '(none)')}</td><td>${u.n}</td></tr>`).join('')}</tbody></table></div>
-        ${d.player ? `<div class="card"><h3>Known player across CTFs</h3><table><thead><tr><th>ctf</th><th>started</th><th>requests</th><th>IDOR ✓</th></tr></thead><tbody>${d.player.ctfs.map((c) => `<tr><td>${esc(c.name)}</td><td>${fmtDate(c.started_at)}</td><td>${c.requests}</td><td>${c.idor || 0}</td></tr>`).join('')}</tbody></table><div style="margin-top:6px;color:var(--muted);font-size:11px">identities: ${d.player.identities.map((i) => `<code>${esc(i.kind)}=${esc(i.value)}</code>`).join(' ')}</div></div>` : ''}
+        <div class="card"><h3>User agents</h3><table><thead><tr><th>user agent</th><th>requests</th></tr></thead><tbody>${d.userAgents.map((u) => `<tr><td class="wrap" style="overflow-wrap:anywhere">${esc(u.ua || '(none)')}</td><td>${u.n}</td></tr>`).join('')}</tbody></table></div>
+        ${d.player ? `<div class="card"><h3>Known player across CTFs</h3><table><thead><tr><th>ctf</th><th>started</th><th>requests</th><th>IDOR ✓</th></tr></thead><tbody>${d.player.ctfs.map((c) => `<tr><td>${esc(c.name)}</td><td>${fmtDate(c.started_at)}</td><td>${c.requests}</td><td>${c.idor || 0}</td></tr>`).join('')}</tbody></table><div class="wrapline" style="margin-top:6px;color:var(--muted);font-size:11px">identities: ${d.player.identities.map((i) => `<code>${esc(i.kind)}=${esc(i.value)}</code>`).join(' ')}</div></div>` : ''}
       </div>
       <div class="card"><h3>Web exploitation attempts ${att.length ? '' : '<span style="color:var(--faint);font-weight:400">none detected</span>'}</h3>
         ${att.map(([c, a]) => `<h4 style="margin:8px 0 4px;font-size:12px"><span class="flag attack">${esc(c)}</span> ${a.count} attempt${a.count > 1 ? 's' : ''}</h4><table><thead><tr><th>time</th><th>method</th><th>path</th><th>status</th><th>where</th><th>sample</th></tr></thead><tbody>${a.samples.map((s) => `<tr><td>${fmtTime(s.ts)}</td><td>${esc(s.method)}</td><td title="${esc(s.path)}">${esc(s.path)}</td><td>${statusBadge(s.status)}</td><td>${esc(s.where)}</td><td class="wrap">${esc(s.sample)}</td></tr>`).join('')}</tbody></table>`).join('')}</div>
