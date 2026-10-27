@@ -232,7 +232,8 @@
         <button class="primary" id="q-run">▶ Run (Ctrl+Enter)</button>
         <select id="q-limit"><option>200</option><option selected>1000</option><option>5000</option><option>20000</option></select>
         <select id="q-ctf"><option value="">current CTF</option></select>
-        <button class="small" id="q-csv" disabled>⬇ CSV</button>
+        <button class="small" id="q-json" disabled>⬇ results .json</button>
+        <button class="small" id="q-csv" disabled>⬇ results .csv</button>
         <span id="q-info" style="color:var(--muted);font-family:var(--mono);font-size:11px"></span>
       </div>
       <div style="margin-top:8px;color:var(--muted);font-size:11px">
@@ -260,7 +261,7 @@
       <h3>Events <span><button class="small admin-only" id="ctf-new">＋ New CTF</button></span></h3>
       <table><thead><tr><th>#</th><th>name</th><th>started</th><th>ended</th><th>students</th><th>requests</th><th>alerts</th><th></th></tr></thead><tbody id="ctf-rows"></tbody></table>
       <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap" class="admin-only">
-        <label class="chip">⬆ Import export file <input type="file" id="ctf-import" accept=".json,application/json" style="display:none"></label>
+        <label class="chip">⬆ Import a ctf-*.json export <input type="file" id="ctf-import" accept=".json,application/json" style="display:none"></label>
         <span id="replay-status" style="color:var(--muted);font-family:var(--mono);font-size:11px"></span>
         <button class="small danger hidden" id="replay-stop">■ Stop replay</button>
       </div>
@@ -546,13 +547,16 @@
     $('q-err').textContent = ''; $('q-sql').classList.add('hidden'); $('q-info').textContent = 'running…';
     const j = await api('/api/query', { q: $('q').value, limit: Number($('q-limit').value), ctf: $('q-ctf').value || undefined }).catch((e) => { $('q-err').textContent = e.message; return null; });
     if (!j) { $('q-info').textContent = ''; return; }
-    lastRows = j.rows; $('q-csv').disabled = !j.rows.length;
+    lastRows = j.rows; $('q-csv').disabled = $('q-json').disabled = !j.rows.length;
     $('q-info').textContent = `${j.count} row${j.count === 1 ? '' : 's'}`; $('q-sql').textContent = j.sql + '   -- params: ' + JSON.stringify(j.params); $('q-sql').classList.remove('hidden');
     $('q-rows').innerHTML = j.rows.map((r) => `<tr class="${['critical', 'high', 'warn'].includes(r.severity) ? 'sev-' + r.severity : ''}"><td>${fmtDate(r.ts)}</td><td>${r.ctf_id}</td><td><a href="/students/${encodeURIComponent(r.student)}" target="_blank">${esc(r.student)}</a></td><td>${esc(r.ip)}</td><td>${esc(r.method)}</td><td title="${esc(r.path)}">${esc(r.path)}</td><td>${esc(r.object_id ?? '')}</td><td>${statusBadge(r.status)}</td><td>${r.size}</td><td>${r.latency}</td><td>${flagsHtml({ flags: r.flags, attacks: [] })}</td><td>${(r.attacks || []).map((a) => `<span class="flag attack">${esc(a.cls)}</span>`).join('')}</td><td title="${esc(r.ua)}">${esc((r.ua || '').slice(0, 30))}</td></tr>`).join('');
   }
   $('q-run').addEventListener('click', runQuery);
   $('q').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runQuery(); });
   document.querySelectorAll('.ex').forEach((el) => el.addEventListener('click', () => { $('q').value = el.textContent; runQuery(); }));
+  $('q-json').addEventListener('click', () => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({ query: $('q').value, exportedAt: new Date().toISOString(), rows: lastRows }, null, 1)], { type: 'application/json' })); a.download = 'ctf-watch-query.json'; a.click();
+  });
   $('q-csv').addEventListener('click', () => {
     const cols = ['ts', 'ctf_id', 'student', 'raw_name', 'source', 'ip', 'method', 'path', 'endpoint', 'object_id', 'status', 'size', 'latency', 'severity', 'flags', 'attacks', 'owner', 'ua'];
     const csv = [cols.join(',')].concat(lastRows.map((r) => cols.map((c) => { let v = r[c]; if (c === 'ts') v = new Date(v).toISOString(); if (typeof v === 'object') v = JSON.stringify(v); return `"${String(v ?? '').replace(/"/g, '""')}"`; }).join(','))).join('\n');
@@ -565,7 +569,7 @@
     const [j, adm] = await Promise.all([tryApi('/api/ctfs'), tryApi('/api/admin')]); if (!j) return;
     state.ctfs = j.list; const isAdmin = state.me && state.me.role === 'admin';
     $('ctf-rows').innerHTML = j.list.map((c) => `<tr><td>${c.id}</td><td>${esc(c.name)}${j.active && j.active.id === c.id ? ' <span class="lvl low">active</span>' : ''}${c.imported ? ' <span class="lvl info">imported</span>' : ''}</td><td>${fmtDate(c.started_at)}</td><td>${fmtDate(c.ended_at)}</td><td>${c.students}</td><td>${c.requests}</td><td>${c.alerts}</td>
-      <td><a href="/api/export?ctf=${c.id}" title="Download export">⬇ export</a>${isAdmin && !(j.active && j.active.id === c.id) ? ` · <button class="small replay" data-id="${c.id}">▶ replay</button> <select class="small spd" data-id="${c.id}"><option value="1">1x</option><option value="10" selected>10x</option><option value="60">60x</option><option value="600">max</option></select>` : ''}</td></tr>`).join('');
+      <td><a href="/api/export?ctf=${c.id}" title="Download the full CTF as JSON (requests, alerts, players) - this is the file Import takes">⬇ export .json</a>${isAdmin && !(j.active && j.active.id === c.id) ? ` · <button class="small replay" data-id="${c.id}">▶ replay</button> <select class="small spd" data-id="${c.id}"><option value="1">1x</option><option value="10" selected>10x</option><option value="60">60x</option><option value="600">max</option></select>` : ''}</td></tr>`).join('');
     if (adm) {
       $('adm-blocked').innerHTML = adm.blocked.map((b) => `<li><span>${esc(b.name)}${b.ip ? ` <span style="color:var(--muted)">(${esc(b.ip)})</span>` : ''}</span>${isAdmin ? `<button class="small unb" data-name="${esc(b.name)}">unblock</button>` : ''}</li>`).join('') || '<li><span style="color:var(--faint)">nobody</span></li>';
       $('adm-ips').innerHTML = adm.dashboardBlockedIps.map((b) => `<li><span>${esc(b.ip)} <span style="color:var(--muted)">${esc(b.reason || '')}</span></span>${isAdmin ? `<button class="small unbip" data-ip="${esc(b.ip)}">unblock</button>` : ''}</li>`).join('') || '<li><span style="color:var(--faint)">none</span></li>';
