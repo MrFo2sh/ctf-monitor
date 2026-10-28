@@ -7,6 +7,7 @@
 | `CTF_TARGET` | empty | optional preset upstream `http://host:port`; otherwise picked in the dashboard and remembered in the database |
 | `CTF_NAME` | empty → `ctf-<date>` | name of the CTF record opened at boot (an open record with another name is closed first) |
 | `PROXY_PORT` / `PROXY_BIND` | `8888` / `127.0.0.1` | where students (via zrok) reach the proxy |
+| `TRUSTED_PROXIES` | `127.0.0.1,::1,::ffff:127.0.0.1` | peers whose `X-Forwarded-For` is believed; `*` = everyone (Docker Desktop rehearsal override sets this) |
 | `DASHBOARD_PORT` / `DASHBOARD_BIND` | `8080` / `127.0.0.1` | the dashboard; never shared through zrok |
 | `DASHBOARD_USERS` | `3` | number of `user_N` viewer accounts generated at boot |
 | `SESSION_TTL_HOURS` | `12` | idle lifetime of a dashboard session |
@@ -64,5 +65,3 @@ Fields `ts student raw ip method path endpoint id status size latency severity f
 | load test (never the real CTF) | `node proxy/mock/loadtest.js --seconds 10 --concurrency 50` |
 | container logs | `docker compose logs -f monitor` |
 | database shell | `sqlite3 data/ctf-watch.db` |
-
-| `TRUSTED_PROXIES` | `127.0.0.1,::1,::ffff:127.0.0.1` | peers whose `X-Forwarded-For` is believed; `*` = everyone (Docker Desktop rehearsal override sets this) |

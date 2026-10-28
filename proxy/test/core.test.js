@@ -90,7 +90,9 @@ test('identity: jwt, then session learned at login, then ip fallback', () => {
   const payload = Buffer.from(JSON.stringify({ username: 'neo', id: 7 })).toString('base64url');
   assert.deepEqual(id.resolve(req({ cookie: `token=h.${payload}.s` })).name, 'neo');
   assert.equal(id.resolve(req({})).name, 'ip:1.2.3.4');
-  assert.equal(id.resolve(req({ 'x-forwarded-for': '9.9.9.9, 1.1.1.1' })).name, 'ip:9.9.9.9');
+  // a forwarded address is believed only when the peer is the trusted tunnel (issue 1)
+  assert.equal(id.resolve(req({ 'x-forwarded-for': '9.9.9.9, 1.1.1.1' }, '127.0.0.1')).name, 'ip:9.9.9.9');
+  assert.equal(id.resolve(req({ 'x-forwarded-for': '9.9.9.9' }, '1.2.3.4')).name, 'ip:1.2.3.4');
   const anon = id.resolve(req({ cookie: 'session=abc' }));
   assert.match(anon.name, /^sess-/);
   const learned = id.learn({ req: { ...req({ cookie: 'session=abc' }), method: 'POST' }, identity: anon, reqBody: { username: 'alice', password: 'x' }, status: 200, resHeaders: {}, resBody: { id: 1001 }, pathOnly: '/login' });
