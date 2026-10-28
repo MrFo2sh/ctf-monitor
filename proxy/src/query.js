@@ -213,12 +213,21 @@ function compileNode(node, params, now) {
  * compile(query, { ctfId, now }) -> { sql, params, where }
  * ctfId scopes the query to one CTF unless the query itself mentions "ctf".
  */
+// does the query itself filter on the ctf field? (decided on the parsed tree, not on the raw text,
+// so a value like path ~ "/ctf/flag" does not switch the automatic scope off)
+function mentionsCtf(node) {
+  if (!node) return false;
+  if (node.type === 'cmp' || node.type === 'in') return node.field === 'ctf';
+  if (node.type === 'not') return mentionsCtf(node.expr);
+  return mentionsCtf(node.left) || mentionsCtf(node.right);
+}
+
 function compile(query, { ctfId, now = Date.now() } = {}) {
   const ast = parse(query);
   const params = [];
   const parts = [];
   if (ast) parts.push(compileNode(ast, params, now));
-  if (ctfId && !/\bctf\b/i.test(query || '')) {
+  if (ctfId && !mentionsCtf(ast)) {
     parts.push('ctf_id = ?');
     params.push(ctfId);
   }

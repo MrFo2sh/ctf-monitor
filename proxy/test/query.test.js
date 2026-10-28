@@ -33,6 +33,14 @@ test('IN lists and numeric coercion', () => {
 test('mentioning ctf disables the automatic ctf scope', () => {
   const q = compile('ctf = 3 AND status = 200', { ctfId: 9, now: NOW });
   assert.deepEqual(q.params, [3, 200]);
+  const q2 = compile('NOT (ctf in (1, 2))', { ctfId: 9, now: NOW });
+  assert.deepEqual(q2.params, [1, 2]);
+});
+
+test('the word "ctf" inside a value does not disable the scope (issue 7)', () => {
+  const q = compile('path ~ "/ctf/flag" OR student = "ctf-master"', { ctfId: 9, now: NOW });
+  assert.deepEqual(q.params, ['%/ctf/flag%', 'ctf-master', 9]);
+  assert.match(q.where, /ctf_id = \?$/);
 });
 
 test('empty query returns everything in the active ctf', () => {

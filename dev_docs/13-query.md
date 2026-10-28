@@ -569,3 +569,7 @@ Run: `cd D:\SIEMs\ctf-watch\proxy; node --test test/query.test.js test/db.test.j
 | `FIELDS` | `{[name]: {col, type, help}}` | Field whitelist and metadata. |
 | `OPS_BY_TYPE` | `{text, num, time, list: string[]}` | Operators per type, for messages and autocomplete. |
 | `QueryError` | `new QueryError(message, pos, len)` | Error with editor position (`pos` may be `null`, `len` ≥ 1). |
+
+## Update: issue 7 fixed
+
+`compile()` no longer tests the raw text for the word `ctf`. A new helper `mentionsCtf(ast)` walks the parsed tree and the automatic scope is dropped only when a condition is on the `ctf` field itself; `path ~ "/ctf/flag"` keeps the scope. Covered by `query.test.js` "the word ctf inside a value does not disable the scope".
