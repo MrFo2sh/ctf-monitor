@@ -103,6 +103,7 @@ class Admin {
     this.save();
     this.store.renameStudent(oldDisplay, newName);
     this.detector.renameStudent(oldDisplay, newName);
+    if (this.onRenamed) this.onRenamed(oldDisplay, newName); // keeps the decoy list in step, like an organizer rename
   }
 
   list() {

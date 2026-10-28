@@ -311,6 +311,14 @@ same database.
 - Passwords, tokens and secrets in CTF traffic are masked before storage and display.
 - The CTF container is never modified. Memory cap: 256 MB (`docker-compose.yml`).
 
+## Documentation
+
+- [`docs/`](docs/README.md): the operator course for the SOC team and organizers who use the
+  dashboard: setting up the day, admitting students, reading the live view, triage, investigating,
+  actions, queries, replay, cheat sheet.
+- [`dev_docs/`](dev_docs/README.md): the developer course: the architecture map and one chapter per
+  source file, walking through the code with exercises.
+
 ## Troubleshooting
 
 | Problem | What to do |
