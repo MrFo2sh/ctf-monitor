@@ -84,6 +84,10 @@ const replay = new Replay({ db, store });
 const playground = new Playground({ proxyPort: PROXY_PORT });
 store.isBlocked = (name) => !!admin.state.blocked[name];
 store.renamePending = (name) => admin.isRenamePending(name);
+// a database write failure is kept for retry; the organizer is told on the first failure and every 10th
+db.onFlushError = (err, n) => {
+  if (n === 1 || n % 10 === 0) store.emitAlert({ type: 'db-error', level: 'critical', msg: `Database write failed ${n} time(s) in a row (${err.message}); ${db.pending.length} requests are waiting to be saved, ${db.droppedRows} dropped so far. Check disk space on the VM.` });
+};
 store.queueStatus = (name) => (gateConfig.queue ? approvals.status(admin.rawNameFor(name)) : null);
 
 // ---------------------------------------------------------------- dashboard accounts

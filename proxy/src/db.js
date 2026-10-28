@@ -51,6 +51,10 @@ class Db {
     this.pending = [];
     this.pendingAlerts = [];
     this.flushTimer = null;
+    this.flushFailures = 0; // consecutive failed flushes (reset on success)
+    this.lastFlushError = null;
+    this.droppedRows = 0; // rows given up after the retry buffer overflowed
+    this.onFlushError = null; // (err, consecutiveFailures) => void, set by server.js to raise an alert
     this.stmts = {
       insertReq: this.db.prepare(`INSERT INTO requests (ctf_id, ts, player_id, student, raw_name, source, ip, method, path, endpoint, object_id, status, size, latency, severity, flags, attacks, owner, ua, body)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
@@ -158,11 +162,30 @@ class Db {
       }
       for (const a of alerts) this.stmts.insertAlert.run(a.ctfId || this.ctfId, a.ts, a.level, a.type, a.student || null, a.ip || null, a.msg, a.data ? JSON.stringify(a.data) : null);
       this.db.exec('COMMIT');
+      this.flushFailures = 0;
+      this.lastFlushError = null;
     } catch (err) {
       try {
         this.db.exec('ROLLBACK');
       } catch {}
-      log('error', `db flush failed: ${err.message}`);
+      // keep the batch and retry later instead of losing it (bounded: oldest rows are dropped past the cap)
+      this.pending = reqs.concat(this.pending);
+      this.pendingAlerts = alerts.concat(this.pendingAlerts);
+      const CAP = 5000;
+      if (this.pending.length > CAP) {
+        this.droppedRows += this.pending.length - CAP;
+        this.pending.splice(0, this.pending.length - CAP);
+      }
+      this.flushFailures++;
+      this.lastFlushError = err.message;
+      log('error', `db flush failed (${this.flushFailures} in a row, ${this.pending.length} rows waiting): ${err.message}`);
+      if (this.onFlushError) {
+        try {
+          this.onFlushError(err, this.flushFailures);
+        } catch {}
+      }
+      this.flushTimer = setTimeout(() => this.flush(), Math.min(2000 * this.flushFailures, 30000));
+      if (this.flushTimer.unref) this.flushTimer.unref();
     }
   }
 

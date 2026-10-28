@@ -14,6 +14,7 @@ const LEVELS = ['info', 'low', 'medium', 'high', 'critical'];
 const ALERT_LEVEL = {
   'idor-success': 'critical',
   'admin-login-conflict': 'critical',
+  'db-error': 'critical',
   'idor-attempt': 'high',
   enumeration: 'medium',
   'burst-errors': 'low',

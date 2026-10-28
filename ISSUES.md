@@ -17,11 +17,11 @@ Items are ordered by how much they matter during a real event.
 - **What**: an `ip` identity is looked up like a name or email. Two students behind one NAT (classroom Wi-Fi) can resolve to the same player, and an identity is never moved once attached to a player.
 - **Fix**: give identity kinds a weight (gate id/email > app username > name > ip) and only create or attach by ip when no stronger identity is present; never *match* on ip alone when the name differs.
 
-## 3. A failed database flush loses the batch
+## 3. A failed database flush loses the batch — FIXED
 
 - **Where**: `proxy/src/db.js` `flush()`.
-- **What**: on an exception the transaction is rolled back and the batch is dropped (logged). A disk-full or a locked database loses up to 200 ms of requests.
-- **Fix**: keep the batch on failure and retry on the next flush, with a cap; raise a critical alert when retries fail.
+- **What**: on an exception the transaction was rolled back and the batch dropped. A disk-full or a locked database lost up to 200 ms of requests.
+- **Fix applied**: the batch is put back in front of the queue and retried with a growing delay (2 s × failures, max 30 s); the retry buffer is capped at 5000 rows (older rows beyond it are dropped and counted in `droppedRows`); `onFlushError` raises a critical `db-error` alert on the first failure and every tenth. Test: `db.test.js` "a failed flush keeps the batch and retries".
 
 ## 4. Import inserts the CTF row outside its transaction — FIXED
 

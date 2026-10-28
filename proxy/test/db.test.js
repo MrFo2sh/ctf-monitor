@@ -82,6 +82,30 @@ test('export / import round trip creates an imported CTF with the same requests'
   assert.throws(() => db.importCtf({ nope: true }), /not a ctf-watch export/);
 });
 
+test('a failed flush keeps the batch and retries instead of losing it (issue 3)', () => {
+  const db = new Db(':memory:');
+  const ctf = db.openCtf('x');
+  const errors = [];
+  db.onFlushError = (err, n) => errors.push(n);
+  db.addRequest(ev({ student: 'keep-me' }));
+  db.addRequest(ev({ student: 'me-too' }));
+  const realRun = db.stmts.insertReq.run.bind(db.stmts.insertReq);
+  db.stmts.insertReq.run = () => { throw new Error('disk full'); };
+  db.flush();
+  assert.equal(db.pending.length, 2, 'rows are kept for retry');
+  assert.equal(db.flushFailures, 1);
+  assert.equal(db.lastFlushError, 'disk full');
+  assert.deepEqual(errors, [1]);
+  assert.equal(db.runSql(`SELECT * FROM requests WHERE ctf_id = ${ctf.id}`, [], 10).length, 0);
+  db.stmts.insertReq.run = realRun;
+  clearTimeout(db.flushTimer);
+  db.flushTimer = null;
+  db.flush();
+  assert.equal(db.pending.length, 0);
+  assert.equal(db.flushFailures, 0);
+  assert.equal(db.runSql(`SELECT * FROM requests WHERE ctf_id = ${ctf.id}`, [], 10).length, 2, 'both rows saved on retry');
+});
+
 test('a failed import leaves no half-imported CTF behind (issue 4)', () => {
   const db = new Db(':memory:');
   db.openCtf('live');
