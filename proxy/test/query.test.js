@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { compile, parse, QueryError } = require('../src/query');
+const { contextAt, compile, parse, QueryError } = require('../src/query');
 
 const NOW = Date.parse('2026-10-28T12:00:00Z');
 
@@ -77,4 +77,21 @@ test('unknown fields, bad operators and injection attempts are rejected', () => 
   assert.throws(() => parse('student = '), QueryError);
   assert.throws(() => compile('ts > "yesterday"'), QueryError);
   assert.throws(() => compile('flag > "x"'), QueryError);
+});
+
+test('autocomplete context keeps working after a quoted value (the closing quote is not an open string)', () => {
+  const at = (q) => contextAt(q, q.length);
+  assert.deepEqual([at('student = "Fo2sh" ').kind, at('student = "Fo2sh" ').partial], ['logic', '']);
+  assert.deepEqual([at('student = "Fo2sh" and').kind, at('student = "Fo2sh" and').partial], ['logic', 'and']);
+  assert.equal(at('student = "Fo2sh" and ').kind, 'field');
+  assert.deepEqual([at('student = "Fo2sh" and st').kind, at('student = "Fo2sh" and st').partial], ['field', 'st']);
+  assert.deepEqual([at('student = "Fo2sh" and status ').kind, at('student = "Fo2sh" and status ').field], ['op', 'status']);
+  const v = at('student = "Fo2sh" and status > ');
+  assert.deepEqual([v.kind, v.field, v.op], ['value', 'status', '>']);
+  assert.deepEqual([at('student = "Fo2sh" and status > 2').kind, at('student = "Fo2sh" and status > 2').partial], ['value', '2']);
+  assert.equal(at('student = "Fo2sh" AND status > 200 ').kind, 'logic');
+  const open = at('status = 200 and method = "PO');
+  assert.deepEqual([open.kind, open.field, open.isOpenStr, open.partial], ['value', 'method', true, '"PO']);
+  const list = at('method in ("GET", ');
+  assert.deepEqual([list.kind, list.field, list.op], ['value', 'method', 'in']);
 });

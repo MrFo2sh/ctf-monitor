@@ -927,33 +927,14 @@
     if (errPos >= 0 && errPos >= src.length) out += '<span class="terr"> </span>';
     qhl.innerHTML = out + '\n';
     $('qed').classList.toggle('bad', !v.ok && src.trim() !== '');
-    if (src.trim() === '') { qlint.textContent = 'empty query = every request of the current CTF'; qlint.className = 'qlint'; }
+    if (src.trim() === '') { qlint.textContent = 'empty query = every request of the current CTF · Ctrl+Space: suggestions · Ctrl+Enter: run'; qlint.className = 'qlint'; }
     else if (v.ok) { qlint.textContent = '✓ valid'; qlint.className = 'qlint ok'; }
     else { qlint.textContent = `✖ ${v.error}${v.pos != null ? ` (at ${v.pos + 1})` : ''}`; qlint.className = 'qlint err'; }
     $('q-run').disabled = !v.ok && src.trim() !== '';
   }
   // ---- autocomplete
   const ac = { items: [], idx: 0, replace: null };
-  function contextAt(src, caret) {
-    // what comes before the caret: tokens so far + the partial word being typed
-    let toks = [];
-    try { toks = Q.tokenize(src.slice(0, caret)); } catch { try { toks = Q.tokenize(src.slice(0, caret).replace(/["'][^"']*$/, '')); } catch { toks = []; } }
-    const before = src.slice(0, caret);
-    const partialM = /([A-Za-z_][A-Za-z0-9_-]*|"[^"]*|'[^']*|[-\d.]+)$/.exec(before);
-    const partial = partialM ? partialM[1] : '';
-    const isOpenStr = /^["']/.test(partial);
-    const done = partial && toks.length && toks[toks.length - 1].pos + toks[toks.length - 1].len === caret && !isOpenStr ? toks.slice(0, -1) : toks;
-    const last = done[done.length - 1], prev = done[done.length - 2];
-    let kind, field, op;
-    if (last && last.t === '(' && prev && prev.t === 'IN') { kind = 'value'; field = (done.slice().reverse().find((t) => t.t === 'ident') || {}).v; field = field && field.toLowerCase(); op = 'in'; }
-    else if (!last || ['(', 'AND', 'OR', 'NOT'].includes(last.t)) kind = 'field';
-    else if (last.t === 'ident') { kind = 'op'; field = last.v.toLowerCase(); }
-    else if (last.t === 'op' && prev && prev.t === 'ident') { kind = 'value'; field = prev.v.toLowerCase(); op = last.v; }
-    else if ((last.t === 'IN' || last.t === ',') ) { kind = 'value'; field = (done.slice().reverse().find((t) => t.t === 'ident') || {}).v; field = field && field.toLowerCase(); op = 'in'; }
-    else if (last.t === 'str' || last.t === 'num' || last.t === ')') kind = 'logic';
-    else kind = 'none';
-    return { kind, field, op, partial, isOpenStr, start: caret - partial.length };
-  }
+  const contextAt = (src, caret) => Q.contextAt(src, caret);
   async function qSuggest() {
     const src = qta.value, caret = qta.selectionStart;
     const c = contextAt(src, caret);
@@ -994,7 +975,8 @@
   qta.addEventListener('keydown', (e) => {
     const open = !qac.classList.contains('hidden');
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); qAcHide(); return runQuery(); }
-    if (!open) { if (e.key === ' ' && e.ctrlKey) { e.preventDefault(); qSuggest(); } return; }
+    if ((e.key === ' ' || e.code === 'Space') && e.ctrlKey) { e.preventDefault(); qSuggest(); return; }
+    if (!open) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); ac.idx = (ac.idx + (e.key === 'ArrowDown' ? 1 : -1) + ac.items.length) % ac.items.length; [...qac.children].forEach((d, i) => d.classList.toggle('on', i === ac.idx)); qac.children[ac.idx].scrollIntoView({ block: 'nearest' }); }
     else if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); qAcAccept(ac.idx); }
     else if (e.key === 'Escape') { e.preventDefault(); qAcHide(); }

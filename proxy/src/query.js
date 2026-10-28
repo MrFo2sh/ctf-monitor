@@ -236,6 +236,65 @@ function compile(query, { ctfId, now = Date.now() } = {}) {
 }
 
 // Linting helper for the editor: { ok, error, pos, len }
+/**
+ * What the editor should offer at `caret`: a field, an operator, a value (for which field and
+ * operator) or a logic word, plus the partial word being typed and where it starts.
+ * A string is "open" only when the tokenizer says so (an unterminated quote before the caret),
+ * never because a closing quote happens to be the last quote on the line.
+ */
+function contextAt(src, caret) {
+  const before = src.slice(0, caret);
+  let toks = [];
+  let partial = '';
+  let isOpenStr = false;
+  try {
+    toks = tokenize(before);
+  } catch (err) {
+    if (err instanceof QueryError && err.pos != null && /unterminated/.test(err.message)) {
+      isOpenStr = true;
+      partial = before.slice(err.pos);
+      try {
+        toks = tokenize(before.slice(0, err.pos));
+      } catch {
+        toks = [];
+      }
+    }
+  }
+  if (!isOpenStr) {
+    const m = /([A-Za-z_][A-Za-z0-9_-]*|-?\d+(?:\.\d+)?)$/.exec(before);
+    partial = m ? m[1] : '';
+  }
+  const lastTok = toks[toks.length - 1];
+  const done = partial && !isOpenStr && lastTok && lastTok.pos + lastTok.len === caret ? toks.slice(0, -1) : toks;
+  const last = done[done.length - 1];
+  const prev = done[done.length - 2];
+  const lastIdent = () => {
+    const t = done.slice().reverse().find((x) => x.t === 'ident');
+    return t ? t.v.toLowerCase() : undefined;
+  };
+  let kind = 'none';
+  let field;
+  let op;
+  if (last && last.t === '(' && prev && prev.t === 'IN') {
+    kind = 'value';
+    field = lastIdent();
+    op = 'in';
+  } else if (!last || ['(', 'AND', 'OR', 'NOT'].includes(last.t)) kind = 'field';
+  else if (last.t === 'ident') {
+    kind = 'op';
+    field = last.v.toLowerCase();
+  } else if (last.t === 'op' && prev && prev.t === 'ident') {
+    kind = 'value';
+    field = prev.v.toLowerCase();
+    op = last.v;
+  } else if (last.t === 'IN' || last.t === ',') {
+    kind = 'value';
+    field = lastIdent();
+    op = 'in';
+  } else if (last.t === 'str' || last.t === 'num' || last.t === ')') kind = 'logic';
+  return { kind, field, op, partial, isOpenStr, start: caret - partial.length };
+}
+
 function validate(query) {
   try {
     compile(query, { now: Date.now() });
@@ -246,6 +305,6 @@ function validate(query) {
   }
 }
 
-const api = { compile, parse, tokenize, validate, FIELDS, OPS_BY_TYPE, QueryError };
+const api = { compile, parse, tokenize, validate, contextAt, FIELDS, OPS_BY_TYPE, QueryError };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else if (typeof window !== 'undefined') window.CtfQuery = api;

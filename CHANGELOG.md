@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.3.4 - 2026-10-28
+- Query editor: autocomplete and the partial-word detection now work after a quoted value (`student = "Fo2sh" and status > 200` offers AND/OR, fields, operators and values at every step). The context logic moved into the shared query module (`contextAt`) with a test. Ctrl+Space always opens suggestions; the hint line says so.
+
 ## 1.3.3 - 2026-10-28
 - Strict gate: a tool without the cookie coming from an address where exactly one student already filled the form passes as that student (curl, wget and scripts from the same machine after the browser signed in). Unknown and shared addresses are still refused and recorded. Browsers without the cookie still get the form.
 

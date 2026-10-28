@@ -1,6 +1,6 @@
 {
   "name": "ctf-watch",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Logging reverse proxy + live IDOR dashboard for web CTFs",
   "license": "MIT",
   "private": true,
