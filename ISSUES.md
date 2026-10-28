@@ -27,11 +27,11 @@ Items are ordered by how much they matter during a real event.
 - **What**: the `ctfs` row was inserted before `BEGIN`; if the requests insert failed, an empty "(imported)" record was left behind.
 - **Fix applied**: the `ctfs` insert is inside the transaction; a failing import rolls back completely. Test: `db.test.js` "a failed import leaves no half-imported CTF behind".
 
-## 5. Rename does not rewrite everything
+## 5. Rename does not rewrite everything — FIXED
 
 - **Where**: `proxy/src/store.js` `renameStudent()`, `proxy/src/detect.js` `renameStudent()`.
-- **What**: alert messages are rewritten by substring replacement (a name that is a substring of another word is corrupted); the `requests` table is updated for the active CTF only, the `alerts` table not at all; in the detector, renaming onto a name that already has state drops the old state instead of merging.
-- **Fix**: rewrite messages by token, update `alerts.student` and all CTFs of the active record, and merge detector windows.
+- **What**: alert messages were rewritten by substring replacement (a name that is a substring of another word got corrupted); the `requests` table was updated for the active CTF only and the `alerts` table not at all; in the detector, renaming onto a name that already had state dropped the old state instead of merging.
+- **Fix applied**: `Store.renameInText` replaces whole words only; for the active CTF the database `requests.student`, `requests.owner`, `alerts.student` and the alert messages are updated; the detector merges enumeration windows, error windows, id sequences and the seen-id set when the target already exists. Tests: `store.test.js` (3) and the detector merge test. Golden replay unchanged.
 
 ## 6. Scanner class is broad — FIXED
 

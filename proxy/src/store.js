@@ -203,12 +203,19 @@ class Store {
     return { n: ev.n, ts: ev.ts, level: level || ALERT_LEVEL[type], type, student: ev.student, ip: ev.ip, endpoint: ev.endpoint, objectId: ev.objectId, owner: ev.owner, status: ev.status, msg, ack: 0, replay: !!ev.replay };
   }
 
+  // replace a name in free text only where it stands as a whole word (never inside another name or a path segment)
+  static renameInText(text, oldName, newName) {
+    const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // adjacent letters, digits, _ . - / : @ mean "part of a bigger token" (another name, an ip, a path segment)
+    return String(text || '').replace(new RegExp(`(^|[^\\p{L}\\p{N}_.\\-/:@])${esc}(?=$|[^\\p{L}\\p{N}_.\\-/:@])`, 'gu'), `$1${newName}`);
+  }
+
   renameStudent(oldName, newName) {
     if (!oldName || !newName || oldName === newName) return;
     for (const ev of this.events) if (ev.student === oldName) ev.student = newName;
     for (const a of this.alerts) {
       if (a.student === oldName) a.student = newName;
-      a.msg = a.msg.split(oldName).join(newName);
+      a.msg = Store.renameInText(a.msg, oldName, newName);
     }
     const s = this.students.get(oldName);
     if (s) {
@@ -238,7 +245,19 @@ class Store {
       }
     }
     if (this.firstIdorSuccess && this.firstIdorSuccess.student === oldName) this.firstIdorSuccess.student = newName;
-    if (this.db) this.db.db.prepare('UPDATE requests SET student = ? WHERE ctf_id = ? AND student = ?').run(newName, this.db.ctfId, oldName);
+    if (this.db && this.db.ctfId) {
+      // the database follows for the active CTF: requests, alerts (student column and message text), owners
+      this.db.flush();
+      const d = this.db.db;
+      d.prepare('UPDATE requests SET student = ? WHERE ctf_id = ? AND student = ?').run(newName, this.db.ctfId, oldName);
+      d.prepare('UPDATE requests SET owner = ? WHERE ctf_id = ? AND owner = ?').run(newName, this.db.ctfId, oldName);
+      d.prepare('UPDATE alerts SET student = ? WHERE ctf_id = ? AND student = ?').run(newName, this.db.ctfId, oldName);
+      const upd = d.prepare('UPDATE alerts SET msg = ? WHERE id = ?');
+      for (const row of d.prepare('SELECT id, msg FROM alerts WHERE ctf_id = ? AND msg LIKE ?').all(this.db.ctfId, `%${oldName}%`)) {
+        const msg = Store.renameInText(row.msg, oldName, newName);
+        if (msg !== row.msg) upd.run(msg, row.id);
+      }
+    }
     for (const l of this.resetListeners) l();
   }
 

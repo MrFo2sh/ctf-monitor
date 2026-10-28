@@ -587,3 +587,7 @@ Tests: no file in `proxy/test` imports `store.js` directly. It is exercised indi
 | `Store#isBlocked`, `#renamePending`, `#queueStatus`, `#isDecoy` | `(name) => bool \| string \| null` | Hooks injected by `server.js`; used in `stats()`. |
 | `LEVELS` | `string[]` | Alert level order. |
 | `ALERT_LEVEL` | `{[type]: level}` | Default alert level per type. |
+
+## Update: issue 5 fixed
+
+`renameStudent()` now rewrites alert text with `Store.renameInText()` (whole-word replacement: letters, digits and `_ . - / : @` next to the name mean it is part of a bigger token, so `bobby`, `bob.smith` and `/bob/x` are left alone), and for the active CTF it also updates the database: `requests.student`, `requests.owner`, `alerts.student` and the alert messages. Covered by `test/store.test.js`.

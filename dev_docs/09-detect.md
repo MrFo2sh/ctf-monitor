@@ -439,3 +439,7 @@ Run them from `D:\SIEMs\ctf-watch\proxy` with `node --test test/core.test.js` (o
 | `Detector#renameStudent` | `(oldName, newName) => void` | Moves state and re-attributes learned ownership. |
 | `Detector#state` | `(name) => state` | Lazily creates the per-student record. |
 | `Detector#students`, `#learned` | `Map` | Cleared directly by `server.js resetLive()`. |
+
+## Update: issue 5 fixed
+
+`renameStudent()` merges when the target name already has state (two rows folded into one): enumeration windows are concatenated and sorted by time, error windows likewise, the id sequence is joined in chronological order (the side whose window started earlier first) with consecutive duplicates removed and trimmed to `SEQ_KEEP`, and the seen-id sets are united. Covered by `store.test.js` "detector.renameStudent merges windows".

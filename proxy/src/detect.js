@@ -26,7 +26,24 @@ class Detector {
     const st = this.students.get(oldName);
     if (st) {
       this.students.delete(oldName);
-      if (!this.students.has(newName)) this.students.set(newName, st);
+      const t = this.students.get(newName);
+      if (!t) this.students.set(newName, st);
+      else {
+        // the target already has state (two rows merged): combine the windows instead of dropping one side
+        const firstTs = (s, ep) => ((s.byEndpoint.get(ep) || [])[0] || {}).ts ?? Infinity;
+        for (const [ep, seq] of st.seq) {
+          // chronological: the side whose window started earlier goes first
+          const cur = t.seq.get(ep) || [];
+          const merged = firstTs(st, ep) <= firstTs(t, ep) ? seq.concat(cur) : cur.concat(seq);
+          t.seq.set(ep, merged.filter((id, i) => i === 0 || merged[i - 1] !== id).slice(-SEQ_KEEP));
+        }
+        for (const [ep, entries] of st.byEndpoint) {
+          const cur = t.byEndpoint.get(ep) || [];
+          t.byEndpoint.set(ep, cur.concat(entries).sort((a, b) => a.ts - b.ts));
+        }
+        t.errors = t.errors.concat(st.errors).sort((a, b) => a - b);
+        for (const k of st.idsSeen) t.idsSeen.add(k);
+      }
     }
     for (const m of this.learned.values()) for (const [id, owner] of m) if (owner === oldName) m.set(id, newName);
   }
