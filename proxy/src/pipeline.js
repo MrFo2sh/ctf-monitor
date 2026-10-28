@@ -55,7 +55,7 @@ function buildEvent(x, deps) {
     const w = worstLevel(attacks);
     if (w === 'critical') severity = 'critical';
     else if (w === 'high' && severity !== 'high') severity = 'high';
-    else if (severity === 'ok' || severity === 'notice') severity = 'warn';
+    else if (w !== 'info' && (severity === 'ok' || severity === 'notice')) severity = 'warn'; // an info-level tag (curl, requests…) never colours the request
   }
   const onDecoy = isDecoy(who.name);
   if (onDecoy) flags = flags.concat('decoy');

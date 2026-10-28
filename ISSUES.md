@@ -33,11 +33,11 @@ Items are ordered by how much they matter during a real event.
 - **What**: alert messages are rewritten by substring replacement (a name that is a substring of another word is corrupted); the `requests` table is updated for the active CTF only, the `alerts` table not at all; in the detector, renaming onto a name that already has state drops the old state instead of merging.
 - **Fix**: rewrite messages by token, update `alerts.student` and all CTFs of the active record, and merge detector windows.
 
-## 6. Scanner class is broad
+## 6. Scanner class is broad — FIXED
 
 - **Where**: `proxy/src/attacks.js`, class `scanner`.
-- **What**: `curl/`, `wget/`, `python-requests/` and `go-http-client` are flagged as scanners (medium). In a CTF where scripting is allowed this is noise.
-- **Fix**: split into `scanner` (sqlmap, nikto, nuclei…) and `tool` (curl, requests…) with level `info`, or make the list configurable in `rules.json`.
+- **What**: `curl/`, `wget/`, `python-requests/` and `go-http-client` were flagged as scanners (medium). In a CTF where scripting is allowed this was noise.
+- **Fix applied**: two classes. `scanner` (sqlmap, nikto, nuclei, gobuster, ffuf, nmap, burp, zap, hydra…) stays medium. New `tool` (curl, wget, python-requests, urllib, Go http client, HTTPie, axios, node-fetch, okhttp) is level `info`: the request keeps the `attack:tool` flag so it is queryable and counted on the card, but an info-level tag never raises the request's severity (`pipeline.js`). The golden fixture was re-baselined: the only differences are the three `curl/` exchanges (scanner → tool, severity warn → ok) and their alert level (medium → info). Test: `attacks.test.js` "plain scripting tools are tagged tool at info level".
 
 ## 7. Query scope is disabled by the word "ctf" anywhere — FIXED
 

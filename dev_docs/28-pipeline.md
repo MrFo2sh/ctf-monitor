@@ -52,3 +52,7 @@ the final object.
 Any change here or in the modules it calls must keep `npm test` green; the golden test is the one
 that will complain. If the change is intended, re-record the fixture in the same commit and explain
 the diff in the commit message.
+
+## Re-baselining the fixture
+
+`node test/golden-rebaseline.js --dry` replays the fixture with the current code and prints every per-event difference against `golden-expected.json` and the alert count changes. Read the list: every line must be explained by the change you intended. Then run it without `--dry` to rewrite the expected file, and commit the fixture together with the code change, quoting the differences in the commit message.

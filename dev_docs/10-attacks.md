@@ -260,3 +260,7 @@ Run: `cd D:\SIEMs\ctf-watch\proxy; node --test test/attacks.test.js`
 ## Update: issue 8 fixed (in the caller)
 
 `classify()` itself is unchanged, but `pipeline.js` now feeds it a body where the values of sensitive fields are masked (`mask.maskBodyText`), a URL masked with `maskUrl`, and runs every returned `sample` through `maskText`. Samples shown in alerts and detail pages can no longer contain a password or a token. The golden replay confirms classification results did not change.
+
+## Update: issue 6 fixed (scanner vs tool)
+
+The `scanner` class now only matches real scanners and fuzzers (sqlmap, nikto, nuclei, gobuster, dirb, ffuf, wfuzz, nmap, masscan, zgrab, acunetix, nessus, openvas, w3af, arachni, burpsuite, zap, hydra), level medium. A new `tool` class (curl, wget, python-requests, python-urllib, Go-http-client, libwww-perl, HTTPie, axios, node-fetch, okhttp) is level `info`: the request carries `attack:tool` (queryable, counted on the card) but `pipeline.js` no longer raises severity for an info-level hit. Covered by `attacks.test.js` "plain scripting tools are tagged tool at info level".

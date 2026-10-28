@@ -35,7 +35,19 @@ test('double URL encoding is decoded before matching', () => {
 test('scanner user agents are flagged from the UA header', () => {
   const hits = classify({ url: '/', ua: 'sqlmap/1.8#stable (https://sqlmap.org)' });
   assert.equal(hits[0].cls, 'scanner');
+  assert.equal(hits[0].level, 'medium');
   assert.equal(hits[0].where, 'user-agent');
+});
+
+test('plain scripting tools are tagged "tool" at info level, not as scanners (issue 6)', () => {
+  for (const ua of ['curl/8.12.1', 'python-requests/2.32', 'Go-http-client/1.1', 'Wget/1.21']) {
+    const hits = classify({ url: '/api/orders/1', ua });
+    assert.equal(hits.length, 1, ua);
+    assert.equal(hits[0].cls, 'tool', ua);
+    assert.equal(hits[0].level, 'info', ua);
+  }
+  assert.equal(worstLevel(classify({ url: '/', ua: 'curl/8.0' })), 'info');
+  assert.deepEqual(classes({ url: '/', ua: 'Mozilla/5.0 (X11; Linux) Firefox/130' }), []);
 });
 
 test('one hit per class, with a short sample and a worst level', () => {

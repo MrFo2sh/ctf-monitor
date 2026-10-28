@@ -20,7 +20,10 @@ const CLASSES = [
   { cls: 'ssrf', level: 'high', label: 'Server-side request forgery', re: [/(^|[=\s"'])https?:\/\/(127\.\d+\.\d+\.\d+|localhost|0\.0\.0\.0|169\.254\.169\.254|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|\[::1\])/i, /\b(gopher|dict|file):\/\//i] },
   { cls: 'redirect', level: 'low', label: 'Open redirect probe', re: [/[?&](next|url|redirect|return|goto|dest|continue)=(https?:)?\/\/(?!127\.0\.0\.1)[a-z0-9.-]+/i] },
   { cls: 'deser', level: 'high', label: 'Deserialization payload', re: [/rO0AB/, /O:\d+:"[a-z_\\]+":\d+:\{/i, /\baced0005\b/i] },
-  { cls: 'scanner', level: 'medium', label: 'Scanner / fuzzing tool', ua: /\b(sqlmap|nikto|nuclei|gobuster|dirbuster|dirb|ffuf|wfuzz|nmap|masscan|zgrab|acunetix|nessus|openvas|w3af|arachni|burpsuite|zap|hydra|python-requests\/|go-http-client|curl\/|wget\/)\b/i },
+  // real vulnerability scanners / fuzzers: worth an alert
+  { cls: 'scanner', level: 'medium', label: 'Scanner / fuzzing tool', ua: /\b(sqlmap|nikto|nuclei|gobuster|dirbuster|dirb|ffuf|wfuzz|nmap|masscan|zgrab|acunetix|nessus|openvas|w3af|arachni|burpsuite|zap|hydra)\b/i },
+  // plain scripting tools: tagged for information only (scripting is normal in a CTF), never raise severity
+  { cls: 'tool', level: 'info', label: 'Scripting tool (curl, wget, requests…)', ua: /\b(python-requests\/|python-urllib|go-http-client|curl\/|wget\/|libwww-perl|httpie|axios\/|node-fetch|okhttp)\b/i },
 ];
 
 function decode(s) {
