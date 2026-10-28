@@ -52,7 +52,7 @@
   .st { display:inline-block; min-width:28px; text-align:center; border-radius:3px; padding:0 4px } .st.s2 { background:rgba(57,135,229,.25) } .st.s3 { background:rgba(109,167,236,.25) } .st.s4 { background:rgba(250,178,25,.25) } .st.s5 { background:rgba(139,152,165,.3) }
   .flag { display:inline-block; font-size:10px; padding:0 5px; border-radius:3px; margin-right:3px; border:1px solid }
   .flag.idor-success { color:var(--critical); border-color:var(--critical) } .flag.idor-attempt { color:var(--high); border-color:var(--high) } .flag.enumeration, .flag.burst-errors { color:var(--warn); border-color:var(--warn) }
-  .flag.blocked { color:var(--muted); border-color:var(--muted) } .flag.attack { color:var(--high); border-color:var(--high); background:rgba(236,131,90,.12) }
+  .flag.blocked { color:var(--muted); border-color:var(--muted) } .flag.attack { color:var(--high); border-color:var(--high); background:rgba(236,131,90,.12) } .flag.decoy { color:var(--warn); border-color:var(--warn) }
   .chip { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:12px; border:1px solid var(--border); cursor:pointer; font-size:11px; color:var(--muted) }
   .chip.on { border-color:var(--accent); color:var(--text); background:rgba(57,135,229,.12) } .chip b { font-family:var(--mono) }
   .card { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:12px 14px; margin-bottom:12px; min-width:0; overflow-x:auto }
@@ -190,6 +190,7 @@
         <button class="small admin-only" id="btn-block">⛔ Block</button>
         <button class="small admin-only" id="btn-ask-rename">🔁 Ask to rename</button>
         <button class="small admin-only" id="btn-rename">✎ Rename</button>
+        <button class="small admin-only" id="btn-decoy">🪤 Send to decoy</button>
       </div>
       <div class="grid2" id="sc-grid"></div>
       <h4 style="margin:10px 0 4px;font-size:11px;color:var(--faint)">IP addresses</h4>
@@ -337,6 +338,22 @@
         <input id="tg-manual" placeholder="or type one: http://127.0.0.1:5000" style="width:280px;font-family:var(--mono)">
         <button class="small" id="tg-use-manual">Use</button>
         <span style="color:var(--muted);font-size:11px">Switching takes effect immediately for the students. You will be asked whether to start a new CTF record.</span>
+      </div>
+    </div>
+    <div class="card wide" id="decoy-card">
+      <h3>🪤 Decoy app behind the proxy <span id="dc-state" class="badge">off</span></h3>
+      <p style="margin:0 0 8px;color:var(--muted);font-size:12px">A second app on the same link. Students you put on the decoy list are routed to it instead of the real CTF, transparently: same link, same cookies, nothing to notice. Pick any address from the scan above, the Playground's mock app, or type one.</p>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap" class="admin-only">
+        <input id="dc-url" placeholder="http://127.0.0.1:4000" style="width:280px;font-family:var(--mono)">
+        <button class="small" id="dc-set">🎯 Use as decoy</button>
+        <button class="small danger hidden" id="dc-clear">⏏ No decoy</button>
+        <span id="dc-note" style="color:var(--muted);font-size:11px"></span>
+      </div>
+      <div style="margin-top:8px"><span style="color:var(--muted);font-size:11px">On the decoy now:</span> <span id="dc-list"></span></div>
+      <div class="admin-only" style="display:flex;gap:6px;align-items:center;margin-top:6px">
+        <input id="dc-add" list="students-list" placeholder="student name" style="width:200px">
+        <button class="small" id="dc-add-btn">🪤 Send to decoy</button>
+        <span style="color:var(--muted);font-size:11px">also on every student card, and "approve to decoy" in the Queue</span>
       </div>
     </div>
     <div class="card wide">
@@ -525,7 +542,7 @@
     if (v === 'requests') { rqApplyFilter(); }
     if (v === 'alerts') loadAlerts();
     if (v === 'students') renderStudentsTable();
-    if (v === 'ctfs') { loadCtfs(); scanTargets(); }
+    if (v === 'ctfs') { loadCtfs(); loadDecoy().then(scanTargets); }
     if (v === 'query') loadCtfOptions();
     if (v === 'playground') loadPlayground();
     if (v === 'gate') loadGate();
@@ -550,7 +567,7 @@
     $('empty').classList.add('hidden');
     const el = document.createElement('div');
     el.className = 'lane'; el.dataset.student = name;
-    el.innerHTML = `<div class="lane-head"><div class="name"><span class="av" style="background:${colorFor(name)}"></span><span class="nm" title="Select">${esc(name)}</span><span class="blk">BLOCKED</span><span class="src">${esc(source || '')}</span></div>
+    el.innerHTML = `<div class="lane-head"><div class="name"><span class="av" style="background:${colorFor(name)}"></span><span class="nm" title="Select">${esc(name)}</span><span class="blk">BLOCKED</span><span class="dcb hidden" title="routed to the decoy app">🪤</span><span class="src">${esc(source || '')}</span></div>
       <div class="counts"><b class="c-req">0</b> req · <span class="c-high">0</span> attempts · <span class="c-crit">0</span> 🚨</div></div><div class="lane-body"><div class="track"></div><div class="seqrow"><div class="seq"></div><div class="atk"></div></div></div>`;
     $('lanes').appendChild(el);
     el.querySelector('.nm').addEventListener('click', () => selectStudent(name));
@@ -631,6 +648,7 @@
     for (const s of st.students) {
       const L = state.lanes.get(s.name); if (!L) continue;
       L.el.querySelector('.src').textContent = s.source + (s.appName ? ' · app user ' + s.appName : '') + (s.id ? ' · id ' + s.id : ''); L.el.classList.toggle('blocked', !!s.blocked);
+      L.el.querySelector('.dcb').classList.toggle('hidden', !s.decoy);
       // server counts are authoritative (they survive a page reload); redraw the badges when they differ
       const c = laneCounts.get(s.name), srv = s.attacks || {};
       if (c && JSON.stringify(c.attacks) !== JSON.stringify(srv)) { c.attacks = { ...srv }; L.atk.innerHTML = attackBadges(c.attacks); }
@@ -664,6 +682,7 @@
       ['requests', `${s.requests} (${s.failed} failed)`], ['IDOR', `${s.idorAttempts} attempts · ${s.idorSuccess} successful`], ['distinct IDs', s.distinctIds]];
     for (const [k, v] of Object.entries(s.profile || {})) if (!k.startsWith('_')) rows.push(['🪪 ' + k, v]); // answers to the extra gate fields
     if (s.queue) rows.push(['queue', s.queue === 'pending' ? '⏳ waiting for approval' : s.queue === 'approved' ? '✅ approved' : '⛔ blocked']);
+    if (s.decoy) rows.push(['routing', '🪤 decoy app']);
     if (s.renamePending) rows.push(['rename', 'requested - waiting for the student']);
     return rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span>`).join('');
   }
@@ -674,6 +693,7 @@
     const s = selectedStudent(); $('student-card').classList.toggle('hidden', !s);
     if (!s) return;
     $('btn-block').textContent = s.blocked ? '✅ Unblock' : '⛔ Block'; $('btn-block').classList.toggle('danger', !s.blocked); $('btn-ask-rename').classList.toggle('hidden', !!s.renamePending);
+    $('btn-decoy').textContent = s.decoy ? '↩ Back to real CTF' : '🪤 Send to decoy';
     $('sc-av').style.background = colorFor(s.name); $('sc-nm').textContent = s.name; $('sc-blocked').classList.toggle('hidden', !s.blocked);
     $('sc-grid').innerHTML = cardGridHtml(s);
     $('sc-ips').innerHTML = cardIpsHtml(s);
@@ -706,6 +726,7 @@
   $('btn-block').addEventListener('click', async () => { const s = selectedStudent(); if (!s) return; if (s.blocked) return tryApi('/api/admin/unblock', { student: s.name }); if (confirm(`Block "${s.name}"?\n\nEvery request from this student (and their IP, unless shared) gets "Access blocked" from the proxy.`)) await tryApi('/api/admin/block', { student: s.name }); });
   $('btn-ask-rename').addEventListener('click', async () => { if (state.filter && confirm(`Ask "${state.filter}" to enter a different name?\n\nTheir browser shows the name page again and other requests are refused until they do.`)) await tryApi('/api/admin/require-rename', { student: state.filter }); });
   $('btn-rename').addEventListener('click', async () => { if (!state.filter) return; const n = prompt(`New name for "${state.filter}":`, state.filter); if (!n || n.trim() === state.filter) return; const j = await tryApi('/api/admin/rename', { student: state.filter, newName: n.trim() }); if (j && j.ok) { addFilterOption(j.name); $('filter').value = j.name; } });
+  $('btn-decoy').addEventListener('click', () => state.filter && toggleDecoy(state.filter));
 
   // ---------- requests view: full-screen live table + request / student sidebar ----------
   const rq = { paused: false, buffer: [], search: '', student: new URLSearchParams(location.search).get('student') || '', sel: null, max: 2000 };
@@ -745,7 +766,7 @@
     const card = $('rq-card'); card.classList.toggle('hidden', !s); if (!s) return;
     const isAdmin = state.me && state.me.role === 'admin';
     card.innerHTML = `<h3>Student</h3><div class="sc-name"><span class="av" style="background:${colorFor(s.name)}"></span><b>${esc(s.name)}</b> ${s.blocked ? '<span class="badge" style="color:var(--critical);border-color:var(--critical)">BLOCKED</span>' : ''}</div>
-      <div class="rq-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px"><button class="small" data-act="details">📄 Details ↗</button>${isAdmin ? `<button class="small ${s.blocked ? '' : 'danger'}" data-act="block">${s.blocked ? '✅ Unblock' : '⛔ Block'}</button>${s.renamePending ? '' : '<button class="small" data-act="ask">🔁 Ask to rename</button>'}<button class="small" data-act="rename">✎ Rename</button>` : ''}<button class="small" data-act="live">📡 Show in Live</button></div>
+      <div class="rq-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px"><button class="small" data-act="details">📄 Details ↗</button>${isAdmin ? `<button class="small ${s.blocked ? '' : 'danger'}" data-act="block">${s.blocked ? '✅ Unblock' : '⛔ Block'}</button>${s.renamePending ? '' : '<button class="small" data-act="ask">🔁 Ask to rename</button>'}<button class="small" data-act="rename">✎ Rename</button><button class="small" data-act="decoy">${s.decoy ? '↩ Back to real CTF' : '🪤 Send to decoy'}</button>` : ''}<button class="small" data-act="live">📡 Show in Live</button></div>
       <div class="grid2">${cardGridHtml(s)}</div>
       <h4 style="margin:10px 0 4px;font-size:11px;color:var(--faint)">IP addresses</h4><ul class="list">${cardIpsHtml(s)}</ul>
       <h4 style="margin:10px 0 4px;font-size:11px;color:var(--faint)">User agents</h4><ul class="list">${cardUasHtml(s)}</ul>
@@ -759,6 +780,7 @@
     if (b.dataset.act === 'block') { if (s && s.blocked) await tryApi('/api/admin/unblock', { student: name }); else if (confirm(`Block "${name}"?`)) await tryApi('/api/admin/block', { student: name }); }
     if (b.dataset.act === 'ask' && confirm(`Ask "${name}" to enter a different name?`)) await tryApi('/api/admin/require-rename', { student: name });
     if (b.dataset.act === 'rename') { const n = prompt(`New name for "${name}":`, name); if (n && n.trim() !== name) await tryApi('/api/admin/rename', { student: name, newName: n.trim() }); }
+    if (b.dataset.act === 'decoy') await toggleDecoy(name);
     setTimeout(rqRenderSide, 1200);
   });
 
@@ -990,7 +1012,8 @@
       const looks = p.ok ? `<span class="st s${String(p.status)[0]}">${p.status}</span> ${esc(p.title || p.contentType || '')}${p.server ? ` <span style="color:var(--muted)">· ${esc(p.server)}</span>` : ''}${p.location ? ` <span style="color:var(--muted)">→ ${esc(p.location)}</span>` : ''}` : `<span style="color:var(--faint)">not http (${esc(p.error || '')})</span>`;
       const where = c.container ? `🐳 ${esc(c.container)} <span style="color:var(--muted)">${esc(c.image || '')}${c.source === 'docker-bridge' ? ' · bridge ip' : c.containerPort ? ` · container port ${c.containerPort}` : ''}</span>` : c.source === 'desktop-host' ? 'process on this computer' : `host process${c.bindAddr ? ` <span style="color:var(--muted)">(${esc(c.bindAddr)})</span>` : ''}`;
       const cur = j.current === c.url;
-      return `<tr class="${cur ? 'sev-warn' : ''}"><td>${esc(c.url)}${cur ? ' <span class="lvl low">current</span>' : ''}</td><td>${where}</td><td>${looks}</td><td>${isAdmin && !cur ? `<button class="small tg-use" data-url="${esc(c.url)}" data-label="${esc(c.container || 'port ' + c.port)}">▶ Use</button>` : ''}</td></tr>`;
+      const isDecoy = dc.target === c.url;
+      return `<tr class="${cur ? 'sev-warn' : ''}"><td>${esc(c.url)}${cur ? ' <span class="lvl low">current</span>' : ''}${isDecoy ? ' <span class="lvl medium">decoy</span>' : ''}</td><td>${where}</td><td>${looks}</td><td style="white-space:nowrap">${isAdmin && !cur ? `<button class="small tg-use" data-url="${esc(c.url)}" data-label="${esc(c.container || 'port ' + c.port)}">▶ Use</button> ` : ''}${isAdmin && !cur && !isDecoy ? `<button class="small tg-decoy" data-url="${esc(c.url)}">🪤 decoy</button>` : ''}</td></tr>`;
     }).join('') || '<tr><td colspan="4" style="color:var(--faint)">no listening ports found</td></tr>';
   }
   async function useTarget(url, label) {
@@ -1002,7 +1025,32 @@
     if (j) { renderTarget(j.target); scanTargets(); loadCtfs(); }
   }
   $('tg-scan').addEventListener('click', scanTargets);
-  $('tg-rows').addEventListener('click', (e) => { const b = e.target.closest('button.tg-use'); if (b) useTarget(b.dataset.url, b.dataset.label); });
+  $('tg-rows').addEventListener('click', (e) => { const b = e.target.closest('button.tg-use'); if (b) return useTarget(b.dataset.url, b.dataset.label); const d = e.target.closest('button.tg-decoy'); if (d) setDecoy(d.dataset.url); });
+
+  // ---------- decoy ----------
+  const dc = { target: null, students: [] };
+  function renderDecoy() {
+    const on = !!dc.target, isAdmin = state.me && state.me.role === 'admin';
+    $('dc-state').textContent = on ? 'on' : 'off'; $('dc-state').style.color = on ? 'var(--warn)' : 'var(--muted)';
+    if ($('dc-url') !== document.activeElement) $('dc-url').value = dc.target || '';
+    $('dc-clear').classList.toggle('hidden', !on || !isAdmin);
+    $('dc-note').textContent = on ? `students on the list are routed to ${dc.target}` : 'no decoy set: everyone reaches the real CTF';
+    $('dc-list').innerHTML = dc.students.length ? dc.students.map((s) => `<span class="chip" style="margin:2px 4px 2px 0">🪤 ${esc(s.name)} <span style="color:var(--faint)">${fmtTime(s.since)}${s.by ? ' · ' + esc(s.by) : ''}</span>${isAdmin ? ` <b class="dc-rm" data-name="${esc(s.name)}" title="back to the real CTF" style="cursor:pointer;color:var(--critical)">✕</b>` : ''}</span>`).join('') : '<span style="color:var(--faint)">nobody</span>';
+    for (const L of state.lanes.values()) { const b = L.el.querySelector('.dcb'); if (b) b.classList.toggle('hidden', !dc.students.some((s) => s.name === L.name)); }
+  }
+  function decoyUpdate(m) { dc.target = m.target; dc.students = m.students || []; renderDecoy(); updateActions(); if (state.view === 'requests' && rq.sel) rqRenderSide(); }
+  async function loadDecoy() { const j = await tryApi('/api/decoy'); if (j) decoyUpdate(j); }
+  async function setDecoy(url) { const j = await tryApi('/api/decoy', { url: url || null }); if (j) { decoyUpdate(j); scanTargets(); } }
+  $('dc-set').addEventListener('click', () => { const v = $('dc-url').value.trim(); if (v) setDecoy(v); });
+  $('dc-clear').addEventListener('click', () => { if (confirm('Remove the decoy? Students on the list go back to the real CTF.')) setDecoy(null); });
+  $('dc-add-btn').addEventListener('click', async () => { const n = $('dc-add').value.trim(); if (!n) return; const j = await tryApi('/api/decoy/add', { student: n }); if (j) { $('dc-add').value = ''; decoyUpdate(j); } });
+  $('dc-list').addEventListener('click', async (e) => { const b = e.target.closest('.dc-rm'); if (b) { const j = await tryApi('/api/decoy/remove', { student: b.dataset.name }); if (j) decoyUpdate(j); } });
+  async function toggleDecoy(name) {
+    const on = dc.students.some((s) => s.name === name);
+    if (!on && !dc.target) return alert('Pick a decoy app first (CTFs tab, "Decoy app behind the proxy").');
+    if (!on && !confirm(`Route "${name}" to the decoy app?\n\nThey keep the same link and will not notice anything.`)) return;
+    const j = await tryApi(on ? '/api/decoy/remove' : '/api/decoy/add', { student: name }); if (j) decoyUpdate(j);
+  }
   $('tg-use-manual').addEventListener('click', () => { const v = $('tg-manual').value.trim(); if (v) useTarget(v, ''); });
   $('tg-disconnect').addEventListener('click', async () => { if (confirm('Disconnect the proxy from the CTF app? Students will see "CTF not open yet".')) { const j = await tryApi('/api/targets', { url: null }); if (j) { renderTarget(null); scanTargets(); } } });
 
@@ -1087,7 +1135,7 @@
       <td><span class="lvl ${it.status === 'pending' ? 'low' : it.status === 'approved' ? 'info' : 'critical'}">${it.status}</span></td>
       <td><b>${esc(it.name)}</b></td>${extra.map((f) => `<td>${esc((it.profile || {})[f.key] ?? '')}</td>`).join('')}
       <td>${esc(it.ip || '')}</td><td title="${esc(it.ua || '')}">${esc((it.ua || '').slice(0, 40))}</td><td>${fmtTime(it.firstSeen)}</td><td>${it.decidedAt ? `${fmtTime(it.decidedAt)}${it.by ? ' · ' + esc(it.by) : ''}` : ''}</td>
-      <td style="white-space:nowrap">${isAdmin ? `${it.status !== 'approved' ? `<button class="small qu-act" data-act="approve" data-name="${esc(it.name)}">✅ Approve</button> ` : ''}${it.status !== 'blocked' ? `<button class="small danger qu-act" data-act="block" data-name="${esc(it.name)}">⛔ Block</button> ` : ''}${it.status !== 'pending' ? `<button class="small qu-act" data-act="reset" data-name="${esc(it.name)}">↺ back to queue</button>` : ''}` : ''}</td></tr>`).join('') || `<tr><td colspan="${8 + extra.length}" style="color:var(--faint)">${qu.filter === 'pending' ? 'nobody is waiting' : 'nothing here'}</td></tr>`;
+      <td style="white-space:nowrap">${isAdmin ? `${it.status !== 'approved' ? `<button class="small qu-act" data-act="approve" data-name="${esc(it.name)}">✅ Approve</button> ${dc.target ? `<button class="small qu-act" data-act="approve-decoy" data-name="${esc(it.name)}" title="approve, but onto the decoy app">🪤 to decoy</button> ` : ''}` : ''}${it.status !== 'blocked' ? `<button class="small danger qu-act" data-act="block" data-name="${esc(it.name)}">⛔ Block</button> ` : ''}${it.status !== 'pending' ? `<button class="small qu-act" data-act="reset" data-name="${esc(it.name)}">↺ back to queue</button>` : ''}` : ''}</td></tr>`).join('') || `<tr><td colspan="${8 + extra.length}" style="color:var(--faint)">${qu.filter === 'pending' ? 'nobody is waiting' : 'nothing here'}</td></tr>`;
     $('qu-selinfo').textContent = qu.sel.size ? `${qu.sel.size} selected` : '';
     $('qu-approve-sel').disabled = $('qu-block-sel').disabled = !qu.sel.size;
     $('nav-queue').textContent = qu.counts.pending || ''; $('nav-queue').classList.toggle('hidden', !qu.enabled || !qu.counts.pending);
@@ -1098,7 +1146,7 @@
   $('qu-search').addEventListener('input', (e) => { qu.search = e.target.value.trim().toLowerCase(); renderQueue(); });
   $('qu-head').addEventListener('change', (e) => { if (e.target.id === 'qu-all') { for (const cb of document.querySelectorAll('.qu-cb')) { cb.checked = e.target.checked; e.target.checked ? qu.sel.add(cb.dataset.name) : qu.sel.delete(cb.dataset.name); } renderQueue(); } });
   $('qu-rows').addEventListener('change', (e) => { const cb = e.target.closest('.qu-cb'); if (cb) { cb.checked ? qu.sel.add(cb.dataset.name) : qu.sel.delete(cb.dataset.name); $('qu-selinfo').textContent = qu.sel.size ? `${qu.sel.size} selected` : ''; $('qu-approve-sel').disabled = $('qu-block-sel').disabled = !qu.sel.size; } });
-  $('qu-rows').addEventListener('click', async (e) => { const b = e.target.closest('button.qu-act'); if (!b) return; if (b.dataset.act === 'block' && !confirm(`Block "${b.dataset.name}"? They will not be able to reach the CTF.`)) return; await tryApi('/api/queue/' + b.dataset.act, { names: [b.dataset.name] }); });
+  $('qu-rows').addEventListener('click', async (e) => { const b = e.target.closest('button.qu-act'); if (!b) return; if (b.dataset.act === 'block' && !confirm(`Block "${b.dataset.name}"? They will not be able to reach the CTF.`)) return; if (b.dataset.act === 'approve-decoy') return tryApi('/api/queue/approve', { names: [b.dataset.name], decoy: true }); await tryApi('/api/queue/' + b.dataset.act, { names: [b.dataset.name] }); });
   $('qu-approve-sel').addEventListener('click', async () => { if (qu.sel.size) { await tryApi('/api/queue/approve', { names: [...qu.sel] }); qu.sel.clear(); } });
   $('qu-block-sel').addEventListener('click', async () => { if (qu.sel.size && confirm(`Block ${qu.sel.size} student(s)?`)) { await tryApi('/api/queue/block', { names: [...qu.sel] }); qu.sel.clear(); } });
 
@@ -1137,6 +1185,7 @@
     if (m.type === 'event') { addDot(m.event, live); addRow(m.event); rqFeed(m.event); }
     else if (m.type === 'alert') { addFeedAlert(m.alert, live); state.alerts.unshift(m.alert); if (state.view === 'alerts') { renderLevelChips(); renderAlertsTable(); } }
     else if (m.type === 'queue') queueUpdate(m);
+    else if (m.type === 'decoy') decoyUpdate(m);
     else if (m.type === 'stats') {
       renderStats(m.stats); renderReplay(m.replay);
       if (m.target !== undefined) { currentTarget = m.target; if ($('tg-manual') !== document.activeElement) renderTarget(m.target); }
@@ -1169,7 +1218,7 @@
     const me = await api('/api/me').catch(() => null); if (!me) return;
     state.me = me; $('me').textContent = `${me.username} (${me.role})`; $('ctf-name').textContent = me.ctf ? me.ctf.name : 'no active CTF';
     if (me.role !== 'admin') document.querySelectorAll('.admin-only').forEach((el) => el.classList.add('hidden'));
-    renderReplay(me.replay); renderTarget(me.target); currentTarget = me.target;
+    renderReplay(me.replay); renderTarget(me.target); currentTarget = me.target; loadDecoy();
     const p = location.pathname; showView(viewFromPath(p), false);
     if (!me.target && me.role === 'admin' && viewFromPath(p) === 'live') showView('ctfs', true); // nothing connected yet: start on the picker
     if (p.startsWith('/students/')) openStudentDetail(decodeURIComponent(p.slice('/students/'.length)), false);

@@ -30,23 +30,27 @@ const NO_TARGET_PAGE = '<!doctype html><html><head><meta charset="utf-8"><title>
  * createProxy({ getTarget, bind, port, ... })
  * getTarget() returns the current upstream base URL (http://host:port) or null when no CTF is selected.
  */
-function createProxy({ getTarget, bind, port, shouldIgnore, onEvent, gate, preRequest }) {
+function createProxy({ getTarget, getTargetFor, bind, port, shouldIgnore, onEvent, gate, preRequest }) {
   const agent = new http.Agent({ keepAlive: true, maxSockets: 512 });
-  let cached = { url: null, host: null, port: null };
-  function currentUpstream() {
-    const url = getTarget();
+  const parsed = new Map(); // url -> { url, host, port }
+  // getTargetFor(req) may route this particular request elsewhere (the decoy); otherwise the real CTF
+  function currentUpstream(req) {
+    const url = (getTargetFor && req ? getTargetFor(req) : null) || getTarget();
     if (!url) return null;
-    if (url !== cached.url) {
-      const u = new URL(url);
-      cached = { url, host: u.hostname, port: Number(u.port) || 80 };
+    let u = parsed.get(url);
+    if (!u) {
+      const p = new URL(url);
+      u = { url, host: p.hostname, port: Number(p.port) || 80 };
+      parsed.set(url, u);
+      if (parsed.size > 50) parsed.delete(parsed.keys().next().value);
     }
-    return cached;
+    return u;
   }
 
   function handle(req, res) {
     if (gate && gate.handle(req, res)) return; // optional "enter your name" page
     if (preRequest && preRequest(req, res)) return; // blocked students are answered here
-    const up = currentUpstream();
+    const up = currentUpstream(req);
     if (!up) {
       res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': '10' });
       res.end(NO_TARGET_PAGE);
@@ -167,7 +171,7 @@ function createProxy({ getTarget, bind, port, shouldIgnore, onEvent, gate, preRe
   // WebSocket / HTTP upgrade: raw TCP tunnel to the app
   function tunnel(req, socket, head) {
     const ts = Date.now();
-    const target = currentUpstream();
+    const target = currentUpstream(req);
     if (!target) {
       socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
       return socket.destroy();

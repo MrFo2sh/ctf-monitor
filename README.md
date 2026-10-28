@@ -206,6 +206,16 @@ to review a past event or rehearse with a realistic feed. While a replay runs, t
 student detail pages and the Query tab read from the replayed CTF. Also here: blocked players,
 blocked dashboard IPs, rename requests.
 
+## The decoy
+
+In the CTFs tab, "🪤 Decoy app behind the proxy" takes a second address (any scanned port, the
+Playground's mock app, or a typed one). Students you put on the decoy list are routed to that app
+instead of the real CTF, transparently: same link, same cookies, nothing to notice. Send a student
+there from their card (Live or Requests tab), from the list on the CTFs card, or straight from the
+Queue with "to decoy" instead of Approve. Their requests carry a `decoy` flag (queryable with
+`flag = "decoy"`), their row shows 🪤, and "Back to real CTF" undoes it. Removing the decoy app
+sends everyone back.
+
 ## Organizer actions
 
 Select a student (Live tab list, or click their name on a row):

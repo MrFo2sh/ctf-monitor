@@ -43,7 +43,7 @@ const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-function createDashboard({ port, bind, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
+function createDashboard({ port, bind, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, decoy, decoySet, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
   bind = bind || '127.0.0.1';
   // while the live view shows a replayed CTF, history views (alerts, student detail, query) read that CTF
   const scopeCtf = (explicit) => (explicit ? Number(explicit) : store.replayCtfId || db.ctfId || undefined);
@@ -284,6 +284,27 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
       return res.end(html.replace('<form method="post"', '<form onsubmit="return false" method="post"'));
     }
 
+    // ---- decoy app
+    if (url === '/api/decoy' && req.method === 'GET') return json(res, 200, decoy.list());
+    if (url.startsWith('/api/decoy') && req.method === 'POST') {
+      if (adminOnly()) return;
+      const body = await readJson(req).catch(() => ({}));
+      try {
+        if (url === '/api/decoy') {
+          decoy.setTarget(body.url ? validateTarget(String(body.url)) : null);
+          return json(res, 200, { ok: true, ...decoy.list() });
+        }
+        const names = [].concat(body.names || body.student || []).map(String).filter(Boolean);
+        if (!names.length) return json(res, 400, { error: 'student required' });
+        if (url === '/api/decoy/add') for (const n of names) decoySet(n, true, user.username);
+        else if (url === '/api/decoy/remove') for (const n of names) decoySet(n, false, user.username);
+        else return json(res, 404, { error: 'unknown action' });
+        return json(res, 200, { ok: true, ...decoy.list() });
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+
     // ---- admission queue
     if (url === '/api/queue' && req.method === 'GET') return json(res, 200, { enabled: gate.config.queue, fields: gate.config.fields, counts: approvals.counts(), items: approvals.list() });
     if (url.startsWith('/api/queue/') && req.method === 'POST') {
@@ -293,7 +314,11 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
       if (!names.length) return json(res, 400, { error: 'names required' });
       try {
         switch (url) {
-          case '/api/queue/approve': return json(res, 200, { ok: true, changed: queueDecide(names, 'approved', user.username) });
+          case '/api/queue/approve': {
+            const changed = queueDecide(names, 'approved', user.username);
+            if (body.decoy) for (const n of changed) decoySet(admin.alias(n), true, user.username); // approved... onto the decoy
+            return json(res, 200, { ok: true, changed });
+          }
           case '/api/queue/block': return json(res, 200, { ok: true, changed: queueDecide(names, 'blocked', user.username) });
           case '/api/queue/reset': return json(res, 200, { ok: true, changed: queueDecide(names, 'pending', user.username) });
           case '/api/queue/remove': return json(res, 200, { ok: true, removed: approvals.remove(names) });
@@ -388,6 +413,7 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
   store.onReset(() => wss.clients.size && broadcast({ type: 'snapshot', ...store.snapshot() }));
   // the Queue tab is realtime: every arrival / decision is pushed
   approvals.onChange(() => wss.clients.size && broadcast({ type: 'queue', counts: approvals.counts(), items: approvals.list() }));
+  decoy.onChange(() => wss.clients.size && broadcast({ type: 'decoy', ...decoy.list() }));
   const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status(), target: getTarget(), mock: { app: playground.mock.running(), sim: playground.sim.running() }, gate: gate.enabled, queue: gate.config.queue ? approvals.counts() : null }), 1000);
   statsTimer.unref();
 

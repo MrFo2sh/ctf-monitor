@@ -12,6 +12,7 @@ const { Auth } = require('./auth');
 const { Admin } = require('./admin');
 const { NameGate, normalizeConfig } = require('./namegate');
 const { Approvals } = require('./approvals');
+const { Decoy } = require('./decoy');
 const { Replay } = require('./replay');
 const { Playground } = require('./playground');
 const { classify, worstLevel } = require('./attacks');
@@ -220,7 +221,8 @@ function onEvent(x) {
   const ev = {
     ts: x.ts, time: new Date(x.ts).toISOString(), student: who.name, rawName: who.rawName || who.name, studentId: who.id, source: who.source,
     appName: who.appName || undefined, profile: profiles[who.rawName || who.name] || undefined, playerId: playerIdFor(who, ip, x.ts), ip, method: x.method, path: maskText(maskUrl(x.url, cfg.maskFields)),
-    endpoint: verdict.endpoint, objectId: verdict.objectId, status: x.status, size: x.size, latencyMs: x.latencyMs, flags, attacks, severity,
+    endpoint: verdict.endpoint, objectId: verdict.objectId, status: x.status, size: x.size, latencyMs: x.latencyMs, flags: decoy.has(who.name) ? flags.concat('decoy') : flags, attacks, severity,
+    decoy: decoy.has(who.name) || undefined,
     owner: verdict.owner, ownerBasis: verdict.ownerBasis, mine: verdict.mine, seq: verdict.seq, sequential: verdict.sequential, distinctIds: verdict.distinctIds,
     idsSeenTotal: verdict.idsSeenTotal, ua: String(x.req.headers['user-agent'] || '').slice(0, 160),
     body: x.method !== 'GET' && reqBody ? maskObject(reqBody, cfg.maskFields) : undefined, error: x.error || undefined,
@@ -252,6 +254,26 @@ function setTarget(url, { label } = {}) {
 }
 const getTarget = () => target;
 const discoverTargets = () => discover({ excludePorts: [PROXY_PORT, DASHBOARD_PORT] });
+
+// the decoy: students on its list are routed to another app, transparently
+const decoy = new Decoy({ db });
+const getTargetFor = (req) => {
+  if (!decoy.target || !decoy.students.size) return null;
+  const who = withAlias(identity.resolve(req));
+  return decoy.targetFor(who.name);
+};
+function decoySet(name, on, by) {
+  if (on) {
+    if (!decoy.target) throw new Error('pick a decoy app first (CTFs tab)');
+    decoy.add(name, by);
+    store.emitAlert({ type: 'decoy', level: 'info', student: name, msg: `${name} is now routed to the decoy app (${decoy.target})${by ? ` by ${by}` : ''}` });
+  } else {
+    decoy.remove(name);
+    store.emitAlert({ type: 'decoy', level: 'info', student: name, msg: `${name} is back on the real CTF` });
+  }
+}
+store.isDecoy = (name) => decoy.has(name);
+admin.onRenamed = (from, to) => decoy.rename(from, to); // a renamed student stays on the decoy
 
 // The public (zrok) link the students use. start.sh writes logs/zrok.url; otherwise parse zrok's own log.
 function studentLink() {
@@ -303,8 +325,8 @@ function stopCtf() {
   return ended;
 }
 
-createProxy({ getTarget, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
-createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
+createProxy({ getTarget, getTargetFor, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
+createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, decoy, decoySet, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
 
 log('info', `ctf-watch v2.1 started (gate ${gateConfig.enabled ? 'on' : 'off'}, fields: ${gateConfig.fields.map((f) => f.key).join(', ')}). ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
 

@@ -78,6 +78,7 @@ class Admin {
     this.save();
     this.store.renameStudent(from, clean);
     this.detector.renameStudent(from, clean);
+    if (this.onRenamed) this.onRenamed(from, clean);
     log('info', `admin: renamed ${from} -> ${clean}`);
     return clean;
   }
