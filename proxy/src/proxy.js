@@ -5,7 +5,7 @@
 const http = require('http');
 const net = require('net');
 const zlib = require('zlib');
-const { log } = require('./util');
+const { log, isTrustedPeer } = require('./util');
 
 const MAX_CAPTURE = 64 * 1024; // bytes of request / response body we keep for inspection
 const HOP_BY_HOP = new Set(['transfer-encoding', 'connection', 'keep-alive', 'proxy-connection', 'upgrade', 'te', 'trailer']);
@@ -74,8 +74,16 @@ function createProxy({ getTarget, getTargetFor, bind, port, shouldIgnore, onEven
     }
     const remote = req.socket.remoteAddress || '';
     const xffKey = Object.keys(headers).find((k) => k.toLowerCase() === 'x-forwarded-for');
-    if (xffKey) headers[xffKey] = `${[].concat(headers[xffKey]).join(', ')}, ${remote}`;
-    else headers['X-Forwarded-For'] = remote;
+    if (isTrustedPeer(remote)) {
+      // behind the tunnel: append our peer, keep the chain the tunnel built
+      if (xffKey) headers[xffKey] = `${[].concat(headers[xffKey]).join(', ')}, ${remote}`;
+      else headers['X-Forwarded-For'] = remote;
+    } else {
+      // a direct client: whatever it claims is discarded, the app sees the real address
+      if (xffKey) delete headers[xffKey];
+      for (const k of Object.keys(headers)) if (k.toLowerCase() === 'x-real-ip') delete headers[k];
+      headers['X-Forwarded-For'] = remote;
+    }
 
     const reqChunks = [];
     let reqCap = 0;
@@ -179,7 +187,7 @@ function createProxy({ getTarget, getTargetFor, bind, port, shouldIgnore, onEven
     const up = net.connect(target.port, target.host, () => {
       let raw = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
       for (let i = 0; i < req.rawHeaders.length; i += 2) raw += `${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`;
-      raw += `X-Forwarded-For: ${req.socket.remoteAddress || ''}\r\n\r\n`;
+      raw += `X-Forwarded-For: ${isTrustedPeer(req.socket.remoteAddress) ? [req.headers['x-forwarded-for'], req.socket.remoteAddress].filter(Boolean).join(', ') : req.socket.remoteAddress || ''}\r\n\r\n`;
       up.write(raw);
       if (head && head.length) up.write(head);
       up.pipe(socket);

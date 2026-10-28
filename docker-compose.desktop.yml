@@ -20,5 +20,8 @@ services:
       PROXY_BIND: 0.0.0.0
       # discovery lists containers by their network ip, and probes common ports on your machine via host.docker.internal
       DISCOVERY_MODE: bridge
+      # Desktop is a rehearsal setup: connections arrive from Docker's gateway, and the Playground's fake
+      # students fake their addresses with X-Forwarded-For, so forwarded headers are believed from anyone here.
+      TRUSTED_PROXIES: "*"
     extra_hosts:
       - "host.docker.internal:host-gateway"

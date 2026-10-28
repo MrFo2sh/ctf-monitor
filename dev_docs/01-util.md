@@ -324,3 +324,7 @@ Run everything with `cd proxy && npm test`.
 | `macFor` | `macFor(ip: string) → Promise<string \| null>` | Linux + private IPv4 only: MAC from `ip neigh show`, cached forever, never rejects. |
 | `nowIso` | `nowIso() → string` | Current time as ISO-8601 UTC. |
 | `log` | `log(level: string, ...args)` | Timestamped console line; `debug` hidden unless `LOG_LEVEL=debug`; `error` → stderr. |
+
+## Update: issue 1 fixed (trusted proxies)
+
+`clientIp(req)` now believes `X-Forwarded-For` / `X-Real-IP` only when the TCP peer (`req.socket.remoteAddress`) is a trusted proxy. The list comes from `setTrustedProxies(spec)` (called once by `server.js` from `TRUSTED_PROXIES`, default `127.0.0.1,::1,::ffff:127.0.0.1`; `*` trusts everyone). `isTrustedPeer(remote)` is exported for `proxy.js`. A direct client is identified by its socket address whatever headers it sends. Covered by `core.test.js` "clientIp believes forwarded headers only from trusted proxies".

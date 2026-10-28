@@ -15,6 +15,23 @@ test('masking hides secrets by field name, in URLs and in free text', () => {
   assert.equal(maskText('t=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijklmnop'), 't=<jwt:***>');
 });
 
+test('clientIp believes forwarded headers only from trusted proxies (issue 1)', () => {
+  const { clientIp, setTrustedProxies, isTrustedPeer } = require('../src/util');
+  const spoof = (remote) => ({ headers: { 'x-forwarded-for': '1.2.3.4, 5.6.7.8', 'x-real-ip': '9.9.9.9' }, socket: { remoteAddress: remote } });
+  setTrustedProxies('127.0.0.1,::1,::ffff:127.0.0.1');
+  assert.equal(clientIp(spoof('127.0.0.1')), '1.2.3.4', 'from the tunnel: first forwarded address');
+  assert.equal(clientIp(spoof('::ffff:127.0.0.1')), '1.2.3.4');
+  assert.equal(clientIp(spoof('203.0.113.7')), '203.0.113.7', 'direct client: headers ignored');
+  assert.equal(clientIp({ headers: {}, socket: { remoteAddress: '203.0.113.7' } }), '203.0.113.7');
+  setTrustedProxies('10.0.0.2');
+  assert.equal(clientIp(spoof('10.0.0.2')), '1.2.3.4');
+  assert.equal(clientIp(spoof('127.0.0.1')), '127.0.0.1', 'localhost is not trusted once a list is given without it');
+  setTrustedProxies('*');
+  assert.equal(isTrustedPeer('203.0.113.7'), true);
+  assert.equal(clientIp(spoof('203.0.113.7')), '1.2.3.4');
+  setTrustedProxies('127.0.0.1,::1,::ffff:127.0.0.1'); // restore the default for the other tests
+});
+
 test('macFor only ever spawns for a well-formed private IPv4 address', async () => {
   const { macFor, isPrivateIPv4 } = require('../src/util');
   assert.equal(isPrivateIPv4('10.0.0.5'), true);

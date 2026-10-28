@@ -88,12 +88,31 @@ function parseBody(contentType, buf) {
   return null;
 }
 
+// Forwarded headers (X-Forwarded-For, X-Real-IP) are only believed when the TCP peer is a trusted proxy
+// (the tunnel on this machine). Anyone else talking to the proxy port directly is identified by their
+// socket address, whatever headers they send. TRUSTED_PROXIES: comma-separated addresses, or "*" to trust all.
+let trustedPeers = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+let trustAllPeers = false;
+function setTrustedProxies(spec) {
+  const items = String(spec == null ? '' : spec).split(',').map((s) => s.trim()).filter(Boolean);
+  trustAllPeers = items.includes('*');
+  trustedPeers = new Set(items.filter((s) => s !== '*'));
+  return { trustAll: trustAllPeers, trusted: [...trustedPeers] };
+}
+function isTrustedPeer(remote) {
+  if (trustAllPeers) return true;
+  if (!remote) return false;
+  const r = String(remote);
+  return trustedPeers.has(r) || (r.startsWith('::ffff:') && trustedPeers.has(r.slice(7)));
+}
 function clientIp(req) {
+  const remote = (req.socket && req.socket.remoteAddress) || 'unknown';
+  if (!isTrustedPeer(remote)) return remote;
   const xff = req.headers['x-forwarded-for'];
   if (xff) return String(xff).split(',')[0].trim();
   const xr = req.headers['x-real-ip'];
   if (xr) return String(xr).trim();
-  return (req.socket && req.socket.remoteAddress) || 'unknown';
+  return remote;
 }
 
 function nowIso() {
@@ -136,4 +155,4 @@ function macFor(ip) {
   });
 }
 
-module.exports = { get, firstOf, shortHash, parseCookies, parseSetCookies, decodeJwt, parseBody, clientIp, macFor, isPrivateIPv4, nowIso, log };
+module.exports = { get, firstOf, shortHash, parseCookies, parseSetCookies, decodeJwt, parseBody, clientIp, setTrustedProxies, isTrustedPeer, macFor, isPrivateIPv4, nowIso, log };

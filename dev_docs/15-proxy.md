@@ -378,3 +378,7 @@ Tests: **there is no unit test for `proxy.js`.** Nothing in `proxy/test/` starts
 | `createProxy` | `createProxy({ getTarget, getTargetFor, bind, port, shouldIgnore, onEvent, gate, preRequest }) → http.Server` | Starts the listening reverse proxy; every finished exchange is passed to `onEvent`. |
 
 Internal (not exported): `decodeBody(encoding, buf)` → decompressed `Buffer` (tolerates truncation); `currentUpstream(req)` → `{ url, host, port } | null`; `handle(req, res)`; `tunnel(req, socket, head)`.
+
+## Update: issue 1 fixed (forwarded headers)
+
+When the peer is trusted (`util.isTrustedPeer`), the proxy appends its address to the incoming `X-Forwarded-For` as before. When the peer is an untrusted direct client, the incoming `X-Forwarded-For` and `X-Real-IP` are deleted and `X-Forwarded-For` is set to the real socket address, so the CTF app never sees a forged chain either. The WebSocket tunnel does the same.

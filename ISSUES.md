@@ -3,13 +3,11 @@
 Verified against the code; each entry says where it is, when it bites, and a sensible fix.
 Items are ordered by how much they matter during a real event.
 
-## 1. Forwarded headers are trusted blindly (identity spoofing)
+## 1. Forwarded headers are trusted blindly (identity spoofing) — FIXED
 
-- **Where**: `proxy/src/util.js` `clientIp()`, used by identity resolution, ip matching, blocking, the queue and the player mapping.
-- **What**: the first value of `X-Forwarded-For` (then `X-Real-IP`) is taken as the client's address. A student who can reach the proxy port directly, instead of through the tunnel, can send `X-Forwarded-For: 1.2.3.4` and appear as another IP: inherit an ip-matched name, dodge an IP block, or pollute another student's IP list.
-- **Why it is acceptable today**: in the intended deployment zrok terminates the connection and sets the header itself, and the proxy binds to `127.0.0.1`, so nobody but the tunnel can talk to it.
-- **When it bites**: `PROXY_BIND=0.0.0.0` on a reachable network, or any deployment where students are on the same host or LAN as the proxy.
-- **Fix**: add a `TRUSTED_PROXIES` setting (list of addresses, default `127.0.0.1`). In `clientIp`, honour the forwarded headers only when `req.socket.remoteAddress` is in that list; otherwise use the socket address and drop the headers before forwarding. Also stop appending to a client-supplied `X-Forwarded-For` in `proxy.js` when the peer is untrusted. Add a unit test in `core.test.js`.
+- **Where**: `proxy/src/util.js` `clientIp()`, used by identity resolution, ip matching, blocking, the queue and the player mapping; `proxy/src/proxy.js` when forwarding.
+- **What**: the first value of `X-Forwarded-For` (then `X-Real-IP`) was taken as the client's address from any peer. A student who could reach the proxy port directly could send `X-Forwarded-For: 1.2.3.4` and appear as another IP.
+- **Fix applied**: `TRUSTED_PROXIES` (default `127.0.0.1,::1,::ffff:127.0.0.1`, the tunnel on the VM; `*` trusts everyone). `clientIp` believes the headers only when the socket peer is in the list, otherwise the socket address is the identity. When forwarding, a trusted peer's chain is appended to, an untrusted client's `X-Forwarded-For` / `X-Real-IP` are dropped and replaced by its real address (HTTP and WebSocket paths). The Docker Desktop rehearsal override sets `*` because the Playground's fake students fake their addresses on purpose. Test: `core.test.js` "clientIp believes forwarded headers only from trusted proxies". Golden replay unchanged (its peer is `127.0.0.1`).
 
 ## 2. Shared IPs can merge two people into one player record
 

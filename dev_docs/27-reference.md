@@ -64,3 +64,5 @@ Fields `ts student raw ip method path endpoint id status size latency severity f
 | load test (never the real CTF) | `node proxy/mock/loadtest.js --seconds 10 --concurrency 50` |
 | container logs | `docker compose logs -f monitor` |
 | database shell | `sqlite3 data/ctf-watch.db` |
+
+| `TRUSTED_PROXIES` | `127.0.0.1,::1,::ffff:127.0.0.1` | peers whose `X-Forwarded-For` is believed; `*` = everyone (Docker Desktop rehearsal override sets this) |

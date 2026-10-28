@@ -19,7 +19,7 @@ const { buildEvent, withAlias: aliasWith, rawToJson } = require('./pipeline');
 const { createProxy } = require('./proxy');
 const { discover, validateTarget } = require('./ports');
 const { createDashboard } = require('./dashboard');
-const { clientIp, macFor, log } = require('./util');
+const { clientIp, macFor, setTrustedProxies, log } = require('./util');
 
 const env = (k, d) => (process.env[k] === undefined || process.env[k] === '' ? d : process.env[k]);
 const flag = (k) => /^(1|true|yes)$/i.test(String(env(k, '')));
@@ -35,6 +35,9 @@ const LOG_DIR = env('LOG_DIR', path.join(__dirname, '..', '..', 'logs'));
 const DATA_DIR = env('DATA_DIR', path.join(__dirname, '..', '..', 'data'));
 const DB_FILE = env('DB_FILE', path.join(DATA_DIR, 'ctf-watch.db'));
 const CTF_NAME = env('CTF_NAME', '');
+
+// forwarded headers are believed only from these peers (the tunnel); "*" trusts everyone (rehearsal setups)
+const TRUSTED = setTrustedProxies(env('TRUSTED_PROXIES', '127.0.0.1,::1,::ffff:127.0.0.1'));
 
 // ---------------------------------------------------------------- core objects
 const config = new Config();
@@ -290,7 +293,7 @@ function stopCtf() {
 createProxy({ getTarget, getTargetFor, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
 createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, decoy, decoySet, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
 
-log('info', `ctf-watch v2.1 started (gate ${gateConfig.enabled ? 'on' : 'off'}, fields: ${gateConfig.fields.map((f) => f.key).join(', ')}). ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
+log('info', `ctf-watch v2.1 started (gate ${gateConfig.enabled ? 'on' : 'off'}, fields: ${gateConfig.fields.map((f) => f.key).join(', ')}; trusted proxies: ${TRUSTED.trustAll ? 'ALL (headers always believed)' : TRUSTED.trusted.join(', ')}). ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
 
 function shutdown() {
   log('info', 'shutting down');
