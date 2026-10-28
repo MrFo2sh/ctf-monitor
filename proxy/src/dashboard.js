@@ -12,6 +12,7 @@ const { validateTarget } = require('./ports');
 const { log, clientIp } = require('./util');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const FONT_FILES = new Set(['VT323-Regular.ttf', 'PressStart2P-Regular.ttf']);
 const PAGES = new Set(['/', '/live', '/alerts', '/students', '/query', '/requests', '/admin', '/ctfs', '/playground', '/gate', '/queue']);
 const CSRF_HEADER = 'x-requested-with';
 
@@ -91,6 +92,23 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
       return res.end('blocked');
     }
 
+    // ---- public: fonts for the login page and the dashboard (self-hosted, no network needed)
+    if (url.startsWith('/fonts/') && req.method === 'GET') {
+      const name = url.slice('/fonts/'.length);
+      if (!FONT_FILES.has(name)) {
+        res.writeHead(404, SECURITY_HEADERS);
+        return res.end('');
+      }
+      fs.readFile(path.join(PUBLIC_DIR, 'fonts', name), (err, data) => {
+        if (err) {
+          res.writeHead(404, SECURITY_HEADERS);
+          return res.end('');
+        }
+        res.writeHead(200, { 'Content-Type': 'font/ttf', 'Cache-Control': 'public, max-age=31536000, immutable', ...SECURITY_HEADERS });
+        res.end(data);
+      });
+      return;
+    }
     // ---- public: login
     if (url === '/login' && req.method === 'GET') return page(res, 'login.html');
     if (url === '/api/login' && req.method === 'POST') {

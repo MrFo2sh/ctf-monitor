@@ -5,25 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CTF Watch Login</title>
 <style>
-  :root { color-scheme: dark; }
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:#0b0f14; color:#e6edf3; font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  form { background:#111820; border:1px solid #1f2a36; border-radius:10px; padding:30px 28px; width:min(92vw,360px); box-shadow:0 20px 60px rgba(0,0,0,.5); }
-  h1 { font-size:13px; letter-spacing:.12em; text-transform:uppercase; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
-  h1 i { width:9px; height:9px; border-radius:50%; background:#0ca30c; display:inline-block; }
-  p { margin:0 0 18px; color:#8b98a5; font-size:13px; }
-  label { display:block; font-size:12px; color:#8b98a5; margin:10px 0 4px; }
-  input { width:100%; box-sizing:border-box; padding:10px 12px; font-size:15px; border-radius:6px; border:1px solid #2a3847; background:#0b0f14; color:#e6edf3; font-family:ui-monospace,Menlo,Consolas,monospace; }
-  input:focus { outline:none; border-color:#3987e5; }
-  button { margin-top:16px; width:100%; padding:11px; font-size:15px; font-weight:600; border:0; border-radius:6px; background:#3987e5; color:#fff; cursor:pointer; }
+  @font-face { font-family:"VT323"; src:url(/fonts/VT323-Regular.ttf) format("truetype"); font-display:swap }
+  @font-face { font-family:"Press Start 2P"; src:url(/fonts/PressStart2P-Regular.ttf) format("truetype"); font-display:swap }
+  :root { color-scheme: dark; --bg:#020a04; --panel:#030f06; --border:#1f6b32; --text:#96ebaa; --bright:#d2ffdc; --muted:#5fae78; --accent:#6eff96; --accent-dim:#0e4a1f; --notice:#ffcd50; --critical:#ff5f50; --glow:0 0 6px rgba(110,255,150,.45); }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--text); font:19px/1.4 "VT323",ui-monospace,Consolas,monospace; }
+  body::before { content:""; position:fixed; inset:0; z-index:9999; pointer-events:none; background:repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px) }
+  body::after { content:""; position:fixed; inset:0; z-index:9998; pointer-events:none; background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.5) 100%) }
+  form { background:var(--panel); border:1px solid var(--border); border-radius:0; padding:28px; width:min(92vw,380px); box-shadow:6px 6px 0 #000, 0 0 30px rgba(110,255,150,.08); }
+  .boot { font-size:15px; color:var(--muted); margin:0 0 14px; white-space:pre-line }
+  h1 { font:13px/1.6 "Press Start 2P","VT323",monospace; color:var(--accent); text-shadow:0 0 10px rgba(110,255,150,.75); text-transform:uppercase; margin:0 0 6px; display:flex; align-items:center; gap:10px; }
+  h1 i { width:10px; height:10px; background:var(--accent); display:inline-block; box-shadow:inset -2px -2px 0 rgba(0,0,0,.4); animation:beacon 2s infinite }
+  h1::after { content:"▮"; animation:blink 1s steps(1) infinite; margin-left:-6px }
+  p { margin:0 0 16px; color:var(--muted); font-size:17px; } p code { color:var(--bright) }
+  label { display:block; font:8px/1 "Press Start 2P","VT323",monospace; color:var(--muted); margin:14px 0 6px; text-transform:uppercase }
+  input { width:100%; box-sizing:border-box; padding:8px 12px; font:21px "VT323",ui-monospace,Consolas,monospace; border-radius:0; border:1px solid var(--border); background:var(--bg); color:var(--bright); caret-color:var(--accent) }
+  input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), var(--glow) }
+  button { margin-top:20px; width:100%; padding:12px; font:10px/1 "Press Start 2P","VT323",monospace; text-transform:uppercase; border:1px solid var(--accent); border-radius:0; background:var(--accent-dim); color:var(--accent); cursor:pointer; box-shadow:3px 3px 0 #000; text-shadow:var(--glow) }
+  button:hover { background:var(--accent); color:var(--bg); text-shadow:none } button:active { transform:translate(1px,1px); box-shadow:2px 2px 0 #000 }
   button:disabled { opacity:.6; }
-  .err { color:#fab219; font-size:13px; margin-top:10px; min-height:1.2em; }
-  .err.crit { color:#d03b3b; }
+  .err { color:var(--notice); font-size:17px; margin-top:12px; min-height:1.2em; }
+  .err.crit { color:var(--critical); text-shadow:0 0 6px rgba(255,95,80,.6) }
+  @keyframes blink { 50% { opacity:0 } } @keyframes beacon { 0% { box-shadow:0 0 0 0 rgba(110,255,150,.7) } 100% { box-shadow:0 0 0 8px rgba(110,255,150,0) } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important } }
 </style>
 </head>
 <body>
 <form id="f" autocomplete="off">
+  <div class="boot">CTF-WATCH BIOS 1.0 ... PHOSPHOR OK
+PROXY ARMED ... DASHBOARD LOCKED</div>
   <h1><i></i> CTF Watch</h1>
-  <p>Organizer dashboard. The accounts are printed by <code>start.sh</code>.</p>
+  <p>Organizer dashboard. Insert the credentials printed by <code>start.sh</code>.</p>
   <label for="u">Username</label><input id="u" name="username" autocomplete="username" autofocus required>
   <label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>
   <button id="b" type="submit">Sign in</button>
