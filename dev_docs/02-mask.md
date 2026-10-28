@@ -174,3 +174,7 @@ Run `cd proxy && npm test`; the relevant test is `masking hides secrets by field
 | `maskText` | `maskText(text) → string` | Replace JWT-shaped tokens with `<jwt:***>` and 32+ hex-digit runs with `<hex:***>`. |
 | `isSensitive` | `isSensitive(name, fields: string[]) → boolean` | Case-insensitive substring test of a key name against the (lower-case) field list. |
 | `MASK` | `'***'` | The replacement text. |
+
+## Update: `maskBodyText(text, fields)` added
+
+Masks the *values* of sensitive fields inside a raw body string, keeping its shape: `"password": "x"` becomes `"password": "***"` and `password=x` becomes `password=***` (field name match is a case-insensitive substring like `isSensitive`). Used by `pipeline.js` before the attack classifier scans a body. Covered by `core.test.js` "maskBodyText hides secret values in JSON and form bodies".

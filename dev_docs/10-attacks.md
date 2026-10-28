@@ -256,3 +256,7 @@ Run: `cd D:\SIEMs\ctf-watch\proxy; node --test test/attacks.test.js`
 | `worstLevel` | `(hits) => 'info' \| 'low' \| 'medium' \| 'high' \| 'critical'` | Highest `level` among the hits, `'info'` for none. |
 | `CLASSES` | `Array<{cls, level, label, re?: RegExp[], ua?: RegExp}>` | The rule table, in scan order. |
 | `LEVEL_RANK` | `{info:0, low:1, medium:2, high:3, critical:4}` | Level ordering. |
+
+## Update: issue 8 fixed (in the caller)
+
+`classify()` itself is unchanged, but `pipeline.js` now feeds it a body where the values of sensitive fields are masked (`mask.maskBodyText`), a URL masked with `maskUrl`, and runs every returned `sample` through `maskText`. Samples shown in alerts and detail pages can no longer contain a password or a token. The golden replay confirms classification results did not change.

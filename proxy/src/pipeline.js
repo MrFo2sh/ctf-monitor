@@ -9,7 +9,7 @@
 //          playerIdFor(who, ip, ts) -> id|null, isDecoy(name) -> bool }
 
 const { classify, worstLevel } = require('./attacks');
-const { maskObject, maskUrl, maskText } = require('./mask');
+const { maskObject, maskUrl, maskText, maskBodyText } = require('./mask');
 const { parseBody, clientIp } = require('./util');
 
 function withAlias(who, alias) {
@@ -45,7 +45,10 @@ function buildEvent(x, deps) {
     : detector.analyze({ student: who, method: x.method, pathOnly: x.pathOnly, url: x.url, status: x.status, size: x.size, hasData, reqBody, ts: x.ts });
 
   // web exploitation attempts (SQLi, XSS, SSTI, LFI, shells, scanners...)
-  const attacks = blockedReq ? [] : classify({ url: x.url, bodyText: x.reqBuf.length ? x.reqBuf.toString('utf8', 0, 8192) : '', ua: x.req.headers['user-agent'], referer: x.req.headers.referer });
+  // the classifier never sees secret values: sensitive fields are masked in the body before scanning, and
+  // the samples it returns are masked again (jwt / long hex), so an alert can never quote a password
+  const bodyText = x.reqBuf.length ? maskBodyText(x.reqBuf.toString('utf8', 0, 8192), cfg.maskFields) : '';
+  const attacks = blockedReq ? [] : classify({ url: maskUrl(x.url, cfg.maskFields), bodyText, ua: x.req.headers['user-agent'], referer: x.req.headers.referer }).map((a) => ({ ...a, sample: maskText(a.sample) }));
   let flags = verdict.flags.concat(attacks.map((a) => `attack:${a.cls}`));
   let severity = verdict.severity;
   if (attacks.length && severity !== 'critical') {

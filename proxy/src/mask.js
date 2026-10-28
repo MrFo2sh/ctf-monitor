@@ -43,4 +43,18 @@ function maskText(text) {
     .replace(/\b[A-Fa-f0-9]{32,}\b/g, '<hex:***>');
 }
 
-module.exports = { maskObject, maskUrl, maskText, isSensitive, MASK };
+// Mask the VALUES of sensitive fields inside a raw body (JSON or form-encoded) while keeping its shape,
+// so the attack classifier can scan it without ever quoting a password in a sample.
+function maskBodyText(text, fields) {
+  if (!text) return text;
+  let out = String(text);
+  for (const f of fields) {
+    const name = f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out
+      .replace(new RegExp(`("[^"]*${name}[^"]*"\\s*:\\s*)("(?:[^"\\\\]|\\\\.)*"|[^,}\\]\\s]+)`, 'gi'), `$1"${MASK}"`) // "password": "x"
+      .replace(new RegExp(`((?:^|[&?])[^&=]*${name}[^&=]*=)[^&]*`, 'gi'), `$1${MASK}`); // password=x
+  }
+  return out;
+}
+
+module.exports = { maskObject, maskUrl, maskText, maskBodyText, isSensitive, MASK };

@@ -30,6 +30,15 @@ test('macFor only ever spawns for a well-formed private IPv4 address', async () 
   assert.equal(await macFor('8.8.8.8'), null);
 });
 
+test('maskBodyText hides secret values in JSON and form bodies but keeps the structure (issue 8)', () => {
+  const { maskBodyText } = require('../src/mask');
+  assert.equal(maskBodyText('{"username":"alice","password":"hunter2","q":"x"}', FIELDS), '{"username":"alice","password":"***","q":"x"}');
+  assert.equal(maskBodyText('user=alice&password=hunter2&next=/', FIELDS), 'user=alice&password=***&next=/');
+  assert.equal(maskBodyText('{"apiToken":"abc","n":1}', FIELDS), '{"apiToken":"***","n":1}');
+  // an injection payload in a non-secret field is still visible to the classifier
+  assert.equal(maskBodyText(`{"q":"' OR 1=1--","password":"' OR 1=1--"}`, FIELDS), `{"q":"' OR 1=1--","password":"***"}`);
+});
+
 test('jwt and body parsing helpers', () => {
   const payload = Buffer.from(JSON.stringify({ sub: '42', username: 'neo' })).toString('base64url');
   assert.deepEqual(decodeJwt(`Bearer aaa.${payload}.sig`), { sub: '42', username: 'neo' });
