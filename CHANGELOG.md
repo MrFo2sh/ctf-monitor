@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.2.1 - 2026-10-28
+- The student-facing gate pages (form, waiting page, blocked page) wear the same phosphor theme as the dashboard. The proxy serves the two fonts itself under `/__ctfwatch/fonts/`, so students need no internet access; the Gate tab's live preview loads them through the dashboard.
+
 ## 1.2.0 - 2026-10-28
 - Every view shares one header anatomy: `> TITLE`, a one-line subtitle, filters, a count, small action buttons and the open-in-tab button.
 - All 105 inline styles in the dashboard markup replaced by a small utility vocabulary (`row`, `hint`, `count`, `w-s/m/l`, `badge on/off/warn/notice`, swatches), so cards, forms, help text and sub-headings look the same on every page.

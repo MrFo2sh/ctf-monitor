@@ -26,6 +26,32 @@ const DEFAULT_CONFIG = {
 };
 const STATUS_PATH = '/__ctfwatch/status';
 const STREAM_PATH = '/__ctfwatch/wait'; // server-sent events: the waiting page learns about the decision instantly
+const FONTS_PATH = '/__ctfwatch/fonts/'; // the two fonts of the gate pages, served by the proxy itself (no network needed)
+const FONT_FILES = new Set(['VT323-Regular.ttf', 'PressStart2P-Regular.ttf']);
+const FONTS_DIR = path.join(__dirname, '..', 'public', 'fonts');
+// One look for the form, the waiting page and the blocked page: the same phosphor theme as the dashboard.
+const GATE_CSS = `<style>
+@font-face{font-family:"VT323";src:url(${FONTS_PATH}VT323-Regular.ttf) format("truetype");font-display:swap}
+@font-face{font-family:"Press Start 2P";src:url(${FONTS_PATH}PressStart2P-Regular.ttf) format("truetype");font-display:swap}
+:root{color-scheme:dark;--bg:#020a04;--panel:#030f06;--border:#1f6b32;--text:#96ebaa;--bright:#d2ffdc;--muted:#5fae78;--accent:#6eff96;--accent-dim:#0e4a1f;--notice:#ffcd50;--critical:#ff5f50;--glow:0 0 6px rgba(110,255,150,.45)}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--text);font:19px/1.4 "VT323",ui-monospace,Consolas,monospace}
+body::before{content:"";position:fixed;inset:0;z-index:9999;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px)}
+body::after{content:"";position:fixed;inset:0;z-index:9998;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.5) 100%)}
+.b,form{background:var(--panel);border:1px solid var(--border);border-radius:0;padding:28px;width:min(92vw,420px);box-shadow:6px 6px 0 #000,0 0 30px rgba(110,255,150,.08)}
+h1{font:13px/1.6 "Press Start 2P","VT323",monospace;color:var(--accent);text-shadow:0 0 10px rgba(110,255,150,.75);text-transform:uppercase;margin:0 0 8px}
+h1::after{content:"▎";animation:blink 1s steps(1) infinite;margin-left:6px}
+p{margin:0 0 16px;color:var(--muted);font-size:17px}
+label{display:block;font:8px/1 "Press Start 2P","VT323",monospace;color:var(--muted);margin:14px 0 6px;text-transform:uppercase}label .opt{font:14px "VT323",monospace;color:var(--muted);text-transform:none}
+input,select{width:100%;box-sizing:border-box;padding:8px 12px;font:21px "VT323",ui-monospace,Consolas,monospace;border-radius:0;border:1px solid var(--border);background:var(--bg);color:var(--bright);caret-color:var(--accent)}
+input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--glow)}
+button{margin-top:20px;width:100%;padding:12px;font:10px/1 "Press Start 2P","VT323",monospace;text-transform:uppercase;border:1px solid var(--accent);border-radius:0;background:var(--accent-dim);color:var(--accent);cursor:pointer;box-shadow:3px 3px 0 #000;text-shadow:var(--glow)}
+button:hover{background:var(--accent);color:var(--bg);text-shadow:none}button:active{transform:translate(1px,1px);box-shadow:2px 2px 0 #000}
+.err{color:var(--notice);font-size:17px;margin:12px 0 0}.n{color:var(--accent);text-shadow:var(--glow)}
+.s{width:14px;height:14px;background:var(--accent);margin:8px auto 0;animation:beacon 1.2s infinite}
+.crit{color:var(--critical);text-shadow:0 0 8px rgba(255,95,80,.6)}
+@keyframes blink{50%{opacity:0}}@keyframes beacon{0%{box-shadow:0 0 0 0 rgba(110,255,150,.7)}100%{box-shadow:0 0 0 10px rgba(110,255,150,0)}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important}}
+</style>`;
 
 function cleanKey(k) {
   return String(k || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
@@ -248,6 +274,23 @@ class NameGate {
     const cfg = this.config;
     const pathOnly = (req.url || '/').split('?')[0];
 
+    // fonts for the gate pages; the name must be one of ours, nothing else under this prefix exists
+    if (pathOnly.startsWith(FONTS_PATH)) {
+      const name = pathOnly.slice(FONTS_PATH.length);
+      if (!FONT_FILES.has(name)) {
+        res.writeHead(404).end();
+        return true;
+      }
+      fs.readFile(path.join(FONTS_DIR, name), (err, data) => {
+        if (err) {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'font/ttf', 'Cache-Control': 'public, max-age=31536000, immutable' });
+        res.end(data);
+      });
+      return true;
+    }
     // polled by the waiting page (fallback): { status: pending | approved | blocked | none }
     if (pathOnly === STATUS_PATH) {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -354,9 +397,7 @@ class NameGate {
     const cfg = this.config;
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(cfg.waitTitle)}</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0f14;color:#e6edf3;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.b{background:#111820;border:1px solid #1f2a36;border-radius:10px;padding:32px 28px;width:min(92vw,420px);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}h1{font-size:20px;margin:0 0 8px}p{color:#8b98a5;font-size:14px;margin:0 0 18px}
-.s{width:28px;height:28px;border:3px solid #2a3847;border-top-color:#3987e5;border-radius:50%;margin:0 auto;animation:r 1s linear infinite}@keyframes r{to{transform:rotate(360deg)}}.n{color:#fab219}</style></head><body>
+${GATE_CSS}<style>.b{text-align:center}</style></head><body>
 <div class="b"><h1>${esc(cfg.waitTitle)}</h1><p>${esc(cfg.waitText).replace(/\{name\}/g, `<span class="n">${esc(name)}</span>`)}</p><div class="s"></div></div>
 <script>(function(){
   var done=false; function go(){ if(!done){ done=true; location.reload(); } }
@@ -368,7 +409,7 @@ class NameGate {
 </body></html>`;
   }
   blockedPage() {
-    return '<!doctype html><html><body style="font-family:system-ui;background:#0b0f14;color:#e6edf3;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#d03b3b">Access blocked</h1><p>The organizer has not admitted you to this CTF.<br>Talk to the organizer if you think this is a mistake.</p></div></body></html>';
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Access blocked</title>${GATE_CSS}<style>.b{text-align:center}</style></head><body><div class="b"><h1 class="crit">Access blocked</h1><p>The organizer has not admitted you to this CTF.<br>Talk to the organizer if you think this is a mistake.</p></div></body></html>`;
   }
 
   page(next, error, values = {}) {
@@ -383,16 +424,7 @@ class NameGate {
     };
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(cfg.title)}</title>
-<style>
-  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0f14;color:#e6edf3;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-  form{background:#111820;border:1px solid #1f2a36;border-radius:10px;padding:32px 28px;width:min(92vw,400px);box-shadow:0 20px 60px rgba(0,0,0,.5)}
-  h1{font-size:20px;margin:0 0 6px}p{margin:0 0 18px;color:#8b98a5;font-size:14px}
-  label{display:block;font-size:13px;color:#8b98a5;margin:12px 0 4px}label .opt{color:#5b6774;font-size:12px}
-  input,select{width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border-radius:6px;border:1px solid #2a3847;background:#0b0f14;color:#e6edf3}
-  input:focus,select:focus{outline:none;border-color:#3987e5}
-  button{margin-top:18px;width:100%;padding:12px;font-size:16px;font-weight:600;border:0;border-radius:6px;background:#3987e5;color:#fff;cursor:pointer}
-  .err{color:#fab219;font-size:13px;margin:10px 0 0}
-</style></head><body>
+${GATE_CSS}</head><body>
 <form method="post" action="${GATE_PATH}">
   <h1>${esc(cfg.title)}</h1>
   ${cfg.intro ? `<p>${esc(cfg.intro)}</p>` : ''}
@@ -404,4 +436,4 @@ class NameGate {
   }
 }
 
-module.exports = { NameGate, GATE_PATH, STATUS_PATH, STREAM_PATH, DEFAULT_CONFIG, normalizeConfig, TYPES };
+module.exports = { NameGate, GATE_PATH, STATUS_PATH, STREAM_PATH, FONTS_PATH, DEFAULT_CONFIG, normalizeConfig, TYPES };

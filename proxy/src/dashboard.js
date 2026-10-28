@@ -93,8 +93,8 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
     }
 
     // ---- public: fonts for the login page and the dashboard (self-hosted, no network needed)
-    if (url.startsWith('/fonts/') && req.method === 'GET') {
-      const name = url.slice('/fonts/'.length);
+    if ((url.startsWith('/fonts/') || url.startsWith('/__ctfwatch/fonts/')) && req.method === 'GET') {
+      const name = url.slice(url.lastIndexOf('/') + 1);
       if (!FONT_FILES.has(name)) {
         res.writeHead(404, SECURITY_HEADERS);
         return res.end('');
@@ -309,7 +309,7 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
       const html = gate.page('/', qs.get('error') || '');
       gate.getConfig = saved;
       // this page is shown inside the Gate tab's iframe: allow framing by the dashboard itself only
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...SECURITY_HEADERS, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; frame-ancestors 'self'" });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...SECURITY_HEADERS, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; form-action 'none'; frame-ancestors 'self'" });
       return res.end(html.replace('<form method="post"', '<form onsubmit="return false" method="post"'));
     }
 
