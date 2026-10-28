@@ -1,7 +1,13 @@
 # Known issues to address
 
-Verified against the code; each entry says where it is, when it bites, and a sensible fix.
+Verified against the code; each entry says where it is, when it bites, and the fix.
 Items are ordered by how much they matter during a real event.
+
+**Status: all ten numbered issues are fixed or addressed** (one commit each, see `git log`), under
+the protection of the golden replay test (`proxy/test/golden.test.js`): 230 recorded exchanges whose
+flags, severities, owners, identities and alerts must not change unless a fix intends it, in which
+case the fixture is re-baselined with the reviewed diff quoted in the commit. The "smaller notes" at
+the end are still open.
 
 ## 1. Forwarded headers are trusted blindly (identity spoofing) — FIXED
 

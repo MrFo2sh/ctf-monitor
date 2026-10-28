@@ -16,3 +16,5 @@ npm-debug.log*
 .DS_Store
 .vscode/
 .idea/
+# TLS files for the dashboard (keep them out of git)
+certs/

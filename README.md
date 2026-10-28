@@ -307,7 +307,10 @@ same database.
 ## Security notes
 
 - Dashboard: login with scrypt-hashed passwords, one session per account, HttpOnly + SameSite
-  cookies, CSRF header on every write, rate-limited logins, IP blocking, strict security headers.
+  cookies, CSRF header on every write, rate-limited logins, IP blocking, strict security headers,
+  optional https (`TLS_CERT` / `TLS_KEY`) with Secure cookies.
+- Forwarded headers (`X-Forwarded-For`) are believed only from the tunnel on the VM
+  (`TRUSTED_PROXIES`); a direct client is identified by its real address.
 - Query language is compiled to parameterised SQL with a field whitelist. No raw SQL is accepted.
 - Passwords, tokens and secrets in CTF traffic are masked before storage and display.
 - The CTF container is never modified. Memory cap: 256 MB (`docker-compose.yml`).
