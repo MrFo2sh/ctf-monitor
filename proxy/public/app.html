@@ -149,6 +149,7 @@
     <button data-view="students">Students</button>
     <button data-view="query">Query</button>
     <button data-view="ctfs">CTFs</button>
+    <button data-view="queue">Queue <span class="cnt hidden" id="nav-queue" style="background:var(--notice);color:#000"></span></button>
     <button data-view="gate">Gate <span class="cnt hidden" id="nav-gate" style="background:var(--notice);color:#000">off</span></button>
     <button data-view="playground">Playground <span class="cnt hidden" id="nav-mock" style="background:var(--warn)">●</span></button>
   </nav>
@@ -361,6 +362,22 @@
     </div>
   </div>
 </section>
+<!-- ============================ QUEUE ============================ -->
+<section class="view" id="view-queue">
+  <div class="view-head">
+    <h2>Queue</h2>
+    <div id="qu-chips"></div>
+    <input id="qu-search" placeholder="🔍 name, answer, ip" style="width:200px">
+    <div class="spacer"></div>
+    <span id="qu-selinfo" style="color:var(--muted);font-family:var(--mono);font-size:11px"></span>
+    <button class="primary small admin-only" id="qu-approve-sel">✅ Approve selected</button>
+    <button class="small danger admin-only" id="qu-block-sel">⛔ Block selected</button>
+    <button class="small" data-open="/queue">↗</button>
+  </div>
+  <div id="qu-off" class="empty hidden">The queue is switched off (Gate tab): students go straight in after the form.</div>
+  <table><thead id="qu-head"></thead><tbody id="qu-rows"></tbody></table>
+</section>
+
 <!-- ============================ GATE ============================ -->
 <section class="view" id="view-gate">
   <div class="view-head"><h2>Gate</h2><span style="color:var(--muted);font-size:11px">the form every student fills the first time they open the CTF in a browser</span><div class="spacer"></div><button class="small" data-open="/gate">↗</button></div>
@@ -368,11 +385,17 @@
     <div class="card">
       <h3>Form <span id="gt-state" class="badge"></span></h3>
       <div class="admin-only">
-        <label class="chip" style="margin-bottom:10px"><input type="checkbox" id="gt-enabled" style="margin:0"> gate enabled (students must fill it before they can play)</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <label class="chip"><input type="checkbox" id="gt-enabled" style="margin:0"> gate enabled (students must fill it before they can play)</label>
+          <label class="chip" title="Off: only browser page loads are asked; curl and scripts pass. On: nothing reaches the CTF without the form."><input type="checkbox" id="gt-strict" style="margin:0"> strict: refuse curl / scripts / crawlers without the form</label>
+          <label class="chip" title="Students wait on a page until you approve them in the Queue tab"><input type="checkbox" id="gt-queue" style="margin:0"> queue: students wait for your approval</label>
+        </div>
         <div class="grid2" style="row-gap:8px">
           <span class="k" style="color:var(--muted)">title</span><input id="gt-title" maxlength="80">
           <span class="k" style="color:var(--muted)">intro text</span><input id="gt-intro" maxlength="400">
           <span class="k" style="color:var(--muted)">button</span><input id="gt-button" maxlength="30" style="width:160px">
+          <span class="k" style="color:var(--muted)">waiting title</span><input id="gt-wait-title" maxlength="80">
+          <span class="k" style="color:var(--muted)">waiting text</span><input id="gt-wait-text" maxlength="400" title="{name} is replaced by the student's name">
         </div>
         <h4 style="margin:14px 0 6px;font-size:11px;color:var(--faint)">FIELDS (asked in this order; "username" is always first and is the student's identity)</h4>
         <table><thead><tr><th>key</th><th>label</th><th>type</th><th>required</th><th>placeholder / options</th><th></th></tr></thead><tbody id="gt-fields"></tbody></table>
@@ -396,7 +419,8 @@
     <div class="card">
       <h3>How it behaves</h3>
       <ul style="margin:0;padding-left:18px;color:var(--muted);font-size:12px;line-height:1.7">
-        <li>Only normal browser page loads are gated. API calls, curl, Burp and scripts are never blocked.</li>
+        <li><b>Strict</b> (default): nothing reaches the CTF without the form. A browser gets the form; curl, scripts and crawlers get a refusal that names the required fields. Tools must send the browser's cookie. Switched off, only browser page loads are asked and tools pass.</li>
+        <li><b>Queue</b> (default): after the form the student sees a waiting page and gets in the instant you approve them in the Queue tab. Blocking from the queue also blocks them at the proxy.</li>
         <li>The username goes into a signed cookie (30 days). Requests from the same IP without the cookie are matched to it, unless two students share that IP.</li>
         <li>"Ask to rename" on a student rejects their name: their browser shows this form again and their other requests are refused until they answer.</li>
         <li>Switching the gate off lets everyone straight through; students are then identified by the app's login or their IP.</li>
@@ -487,7 +511,7 @@
   const tryApi = (p, b, m) => api(p, b, m).catch((e) => { alert(e.message); return null; });
 
   // ---------- routing ----------
-  const VIEWS = ['live', 'requests', 'alerts', 'students', 'query', 'ctfs', 'gate', 'playground'];
+  const VIEWS = ['live', 'requests', 'alerts', 'students', 'query', 'ctfs', 'queue', 'gate', 'playground'];
   function viewFromPath(p) {
     if (p.startsWith('/students')) return 'students';
     const v = p.replace(/^\//, '');
@@ -505,6 +529,7 @@
     if (v === 'query') loadCtfOptions();
     if (v === 'playground') loadPlayground();
     if (v === 'gate') loadGate();
+    if (v === 'queue') loadQueue();
   }
   $('nav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) showView(b.dataset.view, true); });
   window.addEventListener('popstate', () => showView(viewFromPath(location.pathname)));
@@ -626,7 +651,7 @@
       let li = listItems.get(s.name);
       if (!li) { li = document.createElement('li'); li.dataset.name = s.name; li.innerHTML = `<span class="av" style="background:${colorFor(s.name)}"></span><span class="nm">${esc(s.name)}</span><span class="meta"></span>`; li.addEventListener('click', () => selectStudent(s.name)); listItems.set(s.name, li); addFilterOption(s.name); }
       const att = Object.values(s.attacks || {}).reduce((a, b) => a + b, 0);
-      li.querySelector('.meta').innerHTML = `${fmtCount(s.requests)} req${s.idorAttempts ? ` · ${fmtCount(s.idorAttempts)} ⚠` : ''}${s.idorSuccess ? ` · <span class="c">${fmtCount(s.idorSuccess)} 🚨</span>` : ''}${att ? ` · ${fmtCount(att)} 🧨` : ''}${s.renamePending ? ' · 🔁' : ''}`;
+      li.querySelector('.meta').innerHTML = `${s.queue === 'pending' ? '⏳ ' : ''}${fmtCount(s.requests)} req${s.idorAttempts ? ` · ${fmtCount(s.idorAttempts)} ⚠` : ''}${s.idorSuccess ? ` · <span class="c">${fmtCount(s.idorSuccess)} 🚨</span>` : ''}${att ? ` · ${fmtCount(att)} 🧨` : ''}${s.renamePending ? ' · 🔁' : ''}`;
       li.classList.toggle('blk', !!s.blocked); li.classList.toggle('online', Date.now() - s.lastSeen < 120000); li.classList.toggle('sel', state.filter === s.name); li.classList.toggle('hidden', !studentMatches(s.name));
       if (ul.children[i] !== li) ul.insertBefore(li, ul.children[i] || null);
     });
@@ -638,6 +663,7 @@
     const rows = [['identified by', s.source], ['app username', (s.appNames && s.appNames.length ? s.appNames.join(', ') : s.appName) || '–'], ['user id', s.id || '–'], ['player #', s.playerId || '–'], ['first seen', fmtTime(s.firstSeen)], ['last seen', fmtTime(s.lastSeen)],
       ['requests', `${s.requests} (${s.failed} failed)`], ['IDOR', `${s.idorAttempts} attempts · ${s.idorSuccess} successful`], ['distinct IDs', s.distinctIds]];
     for (const [k, v] of Object.entries(s.profile || {})) if (!k.startsWith('_')) rows.push(['🪪 ' + k, v]); // answers to the extra gate fields
+    if (s.queue) rows.push(['queue', s.queue === 'pending' ? '⏳ waiting for approval' : s.queue === 'approved' ? '✅ approved' : '⛔ blocked']);
     if (s.renamePending) rows.push(['rename', 'requested - waiting for the student']);
     return rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span>`).join('');
   }
@@ -1017,12 +1043,12 @@
   // ---------- gate ----------
   let gateCfg = null;
   function gateFromForm() {
-    return { enabled: $('gt-enabled').checked, title: $('gt-title').value, intro: $('gt-intro').value, button: $('gt-button').value, fields: gateCfg.fields };
+    return { enabled: $('gt-enabled').checked, strict: $('gt-strict').checked, queue: $('gt-queue').checked, title: $('gt-title').value, intro: $('gt-intro').value, button: $('gt-button').value, waitTitle: $('gt-wait-title').value, waitText: $('gt-wait-text').value, fields: gateCfg.fields };
   }
   function renderGate() {
     const c = gateCfg; if (!c) return;
-    $('gt-state').textContent = c.enabled ? 'on' : 'off'; $('gt-state').style.color = c.enabled ? 'var(--good)' : 'var(--notice)';
-    $('gt-enabled').checked = c.enabled; $('gt-title').value = c.title; $('gt-intro').value = c.intro; $('gt-button').value = c.button;
+    $('gt-state').textContent = c.enabled ? `on${c.strict ? ' · strict' : ''}${c.queue ? ' · queue' : ''}` : 'off'; $('gt-state').style.color = c.enabled ? 'var(--good)' : 'var(--notice)';
+    $('gt-enabled').checked = c.enabled; $('gt-strict').checked = c.strict; $('gt-queue').checked = c.queue; $('gt-title').value = c.title; $('gt-intro').value = c.intro; $('gt-button').value = c.button; $('gt-wait-title').value = c.waitTitle || ''; $('gt-wait-text').value = c.waitText || '';
     $('gt-fields').innerHTML = c.fields.map((f, i) => `<tr><td><code>${esc(f.key)}</code>${f.locked ? ' 🔒' : ''}</td><td><input data-i="${i}" data-k="label" value="${esc(f.label)}" style="width:150px"></td>
       <td>${f.locked ? 'text' : `<select data-i="${i}" data-k="type">${['text', 'number', 'email', 'select', 'password'].map((t) => `<option value="${t}" ${f.type === t ? 'selected' : ''}>${t === 'select' ? 'choice' : t}</option>`).join('')}</select>`}</td>
       <td>${f.locked ? 'yes' : `<input type="checkbox" data-i="${i}" data-k="required" ${f.required ? 'checked' : ''}>`}</td>
@@ -1042,10 +1068,39 @@
     if (b.classList.contains('gt-del')) f.splice(i, 1); else if (b.classList.contains('gt-up') && i > 1) [f[i - 1], f[i]] = [f[i], f[i - 1]]; else if (b.classList.contains('gt-down') && i < f.length - 1) [f[i + 1], f[i]] = [f[i], f[i + 1]]; renderGate(); });
   $('gt-add').addEventListener('click', () => { const key = $('gt-new-key').value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''); if (!key) return alert('key: letters, digits, _'); if (gateCfg.fields.some((f) => f.key === key)) return alert('that key already exists');
     gateCfg.fields.push({ key, label: $('gt-new-label').value.trim() || key, type: $('gt-new-type').value, required: $('gt-new-req').checked, placeholder: '', options: $('gt-new-type').value === 'select' ? [] : undefined }); $('gt-new-key').value = ''; $('gt-new-label').value = ''; renderGate(); });
-  for (const id of ['gt-enabled', 'gt-title', 'gt-intro', 'gt-button']) $(id).addEventListener('input', () => { $('gt-frame').src = '/api/gate/preview?config=' + encodeURIComponent(JSON.stringify(gateFromForm())); });
+  for (const id of ['gt-enabled', 'gt-strict', 'gt-queue', 'gt-title', 'gt-intro', 'gt-button', 'gt-wait-title', 'gt-wait-text']) $(id).addEventListener('input', () => { $('gt-frame').src = '/api/gate/preview?config=' + encodeURIComponent(JSON.stringify(gateFromForm())); });
   $('gt-save').addEventListener('click', async () => { const j = await tryApi('/api/gate', gateFromForm()); if (j) { gateCfg = j.config; renderGate(); $('gt-msg').textContent = 'saved ✓ (students see it on their next page load)'; setTimeout(() => ($('gt-msg').textContent = ''), 3000); } });
   $('gt-preview').addEventListener('click', () => window.open('/api/gate/preview?config=' + encodeURIComponent(JSON.stringify(gateFromForm())), '_blank'));
-  $('gt-reset').addEventListener('click', () => { if (confirm('Reset the gate form to the default (username only)?')) { gateCfg = { enabled: true, title: 'Welcome to the CTF', intro: 'Before you start, tell us who you are. Use the name your instructor knows you by.', button: 'Start', fields: [{ key: 'username', label: 'Your name', type: 'text', required: true, placeholder: 'Your name', locked: true }] }; renderGate(); } });
+  $('gt-reset').addEventListener('click', () => { if (confirm('Reset the gate form to the default (username only, strict, queue)?')) { gateCfg = { enabled: true, strict: true, queue: true, title: 'Welcome to the CTF', intro: 'Before you start, tell us who you are. Use the name your instructor knows you by.', button: 'Start', waitTitle: 'Almost there', waitText: 'Thanks {name}! The organizer will let you in shortly. This page continues by itself once you are approved.', fields: [{ key: 'username', label: 'Your name', type: 'text', required: true, placeholder: 'Your name', locked: true }] }; renderGate(); } });
+
+  // ---------- queue (realtime over the websocket) ----------
+  const qu = { items: [], counts: { pending: 0, approved: 0, blocked: 0 }, fields: [], filter: 'pending', search: '', sel: new Set(), enabled: true };
+  function renderQueue() {
+    const isAdmin = state.me && state.me.role === 'admin';
+    $('qu-off').classList.toggle('hidden', qu.enabled);
+    $('qu-chips').innerHTML = ['pending', 'approved', 'blocked', 'all'].map((s) => `<span class="chip ${qu.filter === s ? 'on' : ''}" data-s="${s}">${s === 'pending' ? '⏳' : s === 'approved' ? '✅' : s === 'blocked' ? '⛔' : '∑'} ${s}<b>${s === 'all' ? qu.items.length : qu.counts[s] || 0}</b></span>`).join(' ');
+    const extra = qu.fields.filter((f) => f.key !== 'username');
+    $('qu-head').innerHTML = `<tr><th><input type="checkbox" id="qu-all" title="select all shown"></th><th>status</th><th>name</th>${extra.map((f) => `<th>${esc(f.label)}</th>`).join('')}<th>ip</th><th>user agent</th><th>waiting since</th><th>decided</th><th></th></tr>`;
+    const rows = qu.items.filter((it) => (qu.filter === 'all' || it.status === qu.filter) && (!qu.search || `${it.name} ${Object.values(it.profile || {}).join(' ')} ${it.ip || ''}`.toLowerCase().includes(qu.search)));
+    $('qu-rows').innerHTML = rows.map((it) => `<tr class="${it.status === 'blocked' ? 'sev-critical' : it.status === 'pending' ? 'sev-warn' : ''}" data-name="${esc(it.name)}">
+      <td><input type="checkbox" class="qu-cb" data-name="${esc(it.name)}" ${qu.sel.has(it.name) ? 'checked' : ''}></td>
+      <td><span class="lvl ${it.status === 'pending' ? 'low' : it.status === 'approved' ? 'info' : 'critical'}">${it.status}</span></td>
+      <td><b>${esc(it.name)}</b></td>${extra.map((f) => `<td>${esc((it.profile || {})[f.key] ?? '')}</td>`).join('')}
+      <td>${esc(it.ip || '')}</td><td title="${esc(it.ua || '')}">${esc((it.ua || '').slice(0, 40))}</td><td>${fmtTime(it.firstSeen)}</td><td>${it.decidedAt ? `${fmtTime(it.decidedAt)}${it.by ? ' · ' + esc(it.by) : ''}` : ''}</td>
+      <td style="white-space:nowrap">${isAdmin ? `${it.status !== 'approved' ? `<button class="small qu-act" data-act="approve" data-name="${esc(it.name)}">✅ Approve</button> ` : ''}${it.status !== 'blocked' ? `<button class="small danger qu-act" data-act="block" data-name="${esc(it.name)}">⛔ Block</button> ` : ''}${it.status !== 'pending' ? `<button class="small qu-act" data-act="reset" data-name="${esc(it.name)}">↺ back to queue</button>` : ''}` : ''}</td></tr>`).join('') || `<tr><td colspan="${8 + extra.length}" style="color:var(--faint)">${qu.filter === 'pending' ? 'nobody is waiting' : 'nothing here'}</td></tr>`;
+    $('qu-selinfo').textContent = qu.sel.size ? `${qu.sel.size} selected` : '';
+    $('qu-approve-sel').disabled = $('qu-block-sel').disabled = !qu.sel.size;
+    $('nav-queue').textContent = qu.counts.pending || ''; $('nav-queue').classList.toggle('hidden', !qu.enabled || !qu.counts.pending);
+  }
+  async function loadQueue() { const j = await tryApi('/api/queue'); if (!j) return; qu.enabled = j.enabled; qu.fields = j.fields; qu.items = j.items; qu.counts = j.counts; renderQueue(); }
+  function queueUpdate(m) { qu.items = m.items; qu.counts = m.counts; for (const n of [...qu.sel]) if (!qu.items.some((it) => it.name === n && it.status === 'pending')) qu.sel.delete(n); if (state.view === 'queue') renderQueue(); else { $('nav-queue').textContent = qu.counts.pending || ''; $('nav-queue').classList.toggle('hidden', !qu.enabled || !qu.counts.pending); } }
+  $('qu-chips').addEventListener('click', (e) => { const c = e.target.closest('.chip'); if (c) { qu.filter = c.dataset.s; renderQueue(); } });
+  $('qu-search').addEventListener('input', (e) => { qu.search = e.target.value.trim().toLowerCase(); renderQueue(); });
+  $('qu-head').addEventListener('change', (e) => { if (e.target.id === 'qu-all') { for (const cb of document.querySelectorAll('.qu-cb')) { cb.checked = e.target.checked; e.target.checked ? qu.sel.add(cb.dataset.name) : qu.sel.delete(cb.dataset.name); } renderQueue(); } });
+  $('qu-rows').addEventListener('change', (e) => { const cb = e.target.closest('.qu-cb'); if (cb) { cb.checked ? qu.sel.add(cb.dataset.name) : qu.sel.delete(cb.dataset.name); $('qu-selinfo').textContent = qu.sel.size ? `${qu.sel.size} selected` : ''; $('qu-approve-sel').disabled = $('qu-block-sel').disabled = !qu.sel.size; } });
+  $('qu-rows').addEventListener('click', async (e) => { const b = e.target.closest('button.qu-act'); if (!b) return; if (b.dataset.act === 'block' && !confirm(`Block "${b.dataset.name}"? They will not be able to reach the CTF.`)) return; await tryApi('/api/queue/' + b.dataset.act, { names: [b.dataset.name] }); });
+  $('qu-approve-sel').addEventListener('click', async () => { if (qu.sel.size) { await tryApi('/api/queue/approve', { names: [...qu.sel] }); qu.sel.clear(); } });
+  $('qu-block-sel').addEventListener('click', async () => { if (qu.sel.size && confirm(`Block ${qu.sel.size} student(s)?`)) { await tryApi('/api/queue/block', { names: [...qu.sel] }); qu.sel.clear(); } });
 
   // ---------- playground ----------
   let pgTimer = null;
@@ -1081,11 +1136,13 @@
   function handleMessage(m, live) {
     if (m.type === 'event') { addDot(m.event, live); addRow(m.event); rqFeed(m.event); }
     else if (m.type === 'alert') { addFeedAlert(m.alert, live); state.alerts.unshift(m.alert); if (state.view === 'alerts') { renderLevelChips(); renderAlertsTable(); } }
+    else if (m.type === 'queue') queueUpdate(m);
     else if (m.type === 'stats') {
       renderStats(m.stats); renderReplay(m.replay);
       if (m.target !== undefined) { currentTarget = m.target; if ($('tg-manual') !== document.activeElement) renderTarget(m.target); }
       if (m.mock) { $('demo-badge').classList.toggle('hidden', !m.mock.sim); $('nav-mock').classList.toggle('hidden', !(m.mock.app || m.mock.sim)); }
       if (m.gate !== undefined) $('nav-gate').classList.toggle('hidden', !!m.gate);
+      if (m.queue !== undefined) { qu.enabled = !!m.queue; if (m.queue) qu.counts = m.queue; $('nav-queue').textContent = qu.enabled ? (qu.counts.pending || '') : ''; $('nav-queue').classList.toggle('hidden', !qu.enabled || !qu.counts.pending); }
       if (state.view === 'alerts') renderLevelChips();
     }
   }

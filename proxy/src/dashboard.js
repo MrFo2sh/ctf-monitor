@@ -11,7 +11,7 @@ const { validateTarget } = require('./ports');
 const { log, clientIp } = require('./util');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const PAGES = new Set(['/', '/live', '/alerts', '/students', '/query', '/requests', '/admin', '/ctfs', '/playground', '/gate']);
+const PAGES = new Set(['/', '/live', '/alerts', '/students', '/query', '/requests', '/admin', '/ctfs', '/playground', '/gate', '/queue']);
 const CSRF_HEADER = 'x-requested-with';
 
 function readBody(req, limit) {
@@ -43,7 +43,7 @@ const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-function createDashboard({ port, bind, store, admin, auth, db, replay, playground, gate, setGateConfig, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
+function createDashboard({ port, bind, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
   bind = bind || '127.0.0.1';
   // while the live view shows a replayed CTF, history views (alerts, student detail, query) read that CTF
   const scopeCtf = (explicit) => (explicit ? Number(explicit) : store.replayCtfId || db.ctfId || undefined);
@@ -283,6 +283,26 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
       return res.end(html.replace('<form method="post"', '<form onsubmit="return false" method="post"'));
     }
 
+    // ---- admission queue
+    if (url === '/api/queue' && req.method === 'GET') return json(res, 200, { enabled: gate.config.queue, fields: gate.config.fields, counts: approvals.counts(), items: approvals.list() });
+    if (url.startsWith('/api/queue/') && req.method === 'POST') {
+      if (adminOnly()) return;
+      const body = await readJson(req).catch(() => ({}));
+      const names = [].concat(body.names || body.name || []).map(String);
+      if (!names.length) return json(res, 400, { error: 'names required' });
+      try {
+        switch (url) {
+          case '/api/queue/approve': return json(res, 200, { ok: true, changed: queueDecide(names, 'approved', user.username) });
+          case '/api/queue/block': return json(res, 200, { ok: true, changed: queueDecide(names, 'blocked', user.username) });
+          case '/api/queue/reset': return json(res, 200, { ok: true, changed: queueDecide(names, 'pending', user.username) });
+          case '/api/queue/remove': return json(res, 200, { ok: true, removed: approvals.remove(names) });
+          default: return json(res, 404, { error: 'unknown action' });
+        }
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+
     // ---- mock playground (fake CTF app + fake students, run as child processes of the monitor)
     if (url === '/api/playground' && req.method === 'GET') return json(res, 200, playground.status());
     if (url.startsWith('/api/playground/') && req.method === 'POST') {
@@ -365,7 +385,9 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
     if (alert) broadcast({ type: 'alert', alert });
   });
   store.onReset(() => wss.clients.size && broadcast({ type: 'snapshot', ...store.snapshot() }));
-  const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status(), target: getTarget(), mock: { app: playground.mock.running(), sim: playground.sim.running() }, gate: gate.enabled }), 1000);
+  // the Queue tab is realtime: every arrival / decision is pushed
+  approvals.onChange(() => wss.clients.size && broadcast({ type: 'queue', counts: approvals.counts(), items: approvals.list() }));
+  const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status(), target: getTarget(), mock: { app: playground.mock.running(), sim: playground.sim.running() }, gate: gate.enabled, queue: gate.config.queue ? approvals.counts() : null }), 1000);
   statsTimer.unref();
 
   server.listen(port, bind, () => log('info', `dashboard on http://${bind}:${port}${bind === '127.0.0.1' ? '  (local only)' : ''}`));

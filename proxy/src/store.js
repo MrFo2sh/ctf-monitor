@@ -20,6 +20,7 @@ const ALERT_LEVEL = {
   blocked: 'low',
   'web-attack': 'high', // overridden by the worst attack class level
   'new-student': 'info',
+  queue: 'info',
   renamed: 'info',
   info: 'info',
 };
@@ -36,6 +37,7 @@ class Store {
     this.resetListeners = new Set();
     this.isBlocked = () => false;
     this.renamePending = () => false;
+    this.queueStatus = () => null; // set by server.js: pending | approved | blocked | null
     this.stream = null;
     this.streamDate = null;
     if (logDir) fs.mkdirSync(logDir, { recursive: true });
@@ -265,7 +267,7 @@ class Store {
       const c = `${String(code)[0]}xx`;
       if (classes[c] !== undefined) classes[c] += n;
     }
-    const students = [...this.students.values()].map((s) => ({ ...s, blocked: this.isBlocked(s.name), renamePending: this.renamePending(s.name) }));
+    const students = [...this.students.values()].map((s) => ({ ...s, blocked: this.isBlocked(s.name), renamePending: this.renamePending(s.name), queue: this.queueStatus(s.name) }));
     const byLevel = {};
     for (const l of LEVELS) byLevel[l] = 0;
     let unacked = 0;

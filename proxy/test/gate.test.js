@@ -53,7 +53,7 @@ test('page renders the configured fields and the signed cookie round-trips', () 
 });
 
 test('disabled gate never intercepts; enabled gate intercepts only browser navigations', () => {
-  const cfgOn = normalizeConfig({ enabled: true });
+  const cfgOn = normalizeConfig({ enabled: true, strict: false, queue: false });
   const cfgOff = normalizeConfig({ enabled: false });
   let cfg = cfgOn;
   const g = new NameGate({ secretFile: null, getConfig: () => cfg });

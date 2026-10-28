@@ -231,10 +231,23 @@ fields (student id, email, team as a choice list, and so on) with a label, a typ
 flag, change the title and intro text, and see a live preview. Answers are kept per student and
 shown on their card and detail page; an id or email also helps recognise the same person in a
 future CTF. A password-type field is never stored. The name goes into a signed cookie and is used
-for their row. Requests without the cookie from the same IP (curl, scripts) are matched to that
-name, unless two students share the IP. Only browser page loads are ever asked; tools are never
-blocked. The gate can be switched off in the tab, in which case students are identified by the
-app's login or their IP.
+for their row.
+
+Two switches, both on by default:
+
+- **Strict**: nothing reaches the CTF without the form. A browser gets the form; curl, scripts
+  and crawlers get a refusal that names the required fields ("You must set your Your name,
+  Student ID first"). Tools must send the browser's cookie. Switched off, only browser page loads
+  are asked and tools pass through (requests from the same IP are then matched to the name).
+- **Queue**: after the form, the student sees a waiting page and the **Queue** tab shows them with
+  their answers, IP and user agent. Tick students and "Approve selected" / "Block selected", or
+  approve and block one by one. The student's page continues by itself the instant they are
+  approved (the waiting page keeps an event stream open to the proxy). Blocking from the queue
+  also blocks them at the proxy. A yellow counter on the tab shows how many are waiting, and the
+  tab updates live as students arrive.
+
+The gate can be switched off in the tab, in which case students are identified by the app's login
+or their IP.
 
 **Players across CTFs.** Each student is linked to a player record by name, app username, IP and,
 when they are on the same LAN as the VM, MAC address. The next CTF recognises them: the student

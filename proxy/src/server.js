@@ -11,6 +11,7 @@ const { Db } = require('./db');
 const { Auth } = require('./auth');
 const { Admin } = require('./admin');
 const { NameGate, normalizeConfig } = require('./namegate');
+const { Approvals } = require('./approvals');
 const { Replay } = require('./replay');
 const { Playground } = require('./playground');
 const { classify, worstLevel } = require('./attacks');
@@ -43,17 +44,32 @@ const ctf = db.openCtf(CTF_NAME || undefined);
 // The gate (the form students fill on their first browser visit) is configured in the dashboard, Gate tab.
 let gateConfig = normalizeConfig(db.get('gate_config', null) || { title: env('NAME_GATE_TITLE', 'Welcome to the CTF') });
 const profiles = db.get('gate_profiles', {}); // raw student name -> answers to the extra gate fields
+const approvals = new Approvals({ db }); // the admission queue (Queue tab)
 const gate = new NameGate({
   secretFile: path.join(DATA_DIR, '.name-gate-secret'),
   cookie: env('NAME_GATE_COOKIE', 'ctfw_name'),
   getConfig: () => gateConfig,
+  approvals,
   onProfile: (name, profile) => {
     profiles[name] = { ...(profiles[name] || {}), ...profile, _at: Date.now() };
     db.set('gate_profiles', profiles);
     const s = store.students.get(admin.alias(name));
     if (s) s.profile = profiles[name];
   },
+  onEnqueue: (name, info) => store.emitAlert({ type: 'queue', level: 'info', student: admin.alias(name), ip: info.ip, msg: `${name} filled the gate form and is waiting for approval (Queue tab)` }),
 });
+// decisions from the Queue tab: block also blocks at the proxy level (name + ip)
+function queueDecide(names, status, by) {
+  const changed = approvals[status === 'approved' ? 'approve' : status === 'blocked' ? 'block' : 'reset'](names, by);
+  for (const raw of changed) {
+    const display = admin.alias(raw);
+    if (status === 'blocked') {
+      const it = approvals.get(raw);
+      admin.block(display, it && it.ip);
+    } else if (admin.state.blocked[display]) admin.unblock(display);
+  }
+  return changed;
+}
 function setGateConfig(raw) {
   gateConfig = normalizeConfig(raw);
   db.set('gate_config', gateConfig);
@@ -68,6 +84,7 @@ const replay = new Replay({ db, store });
 const playground = new Playground({ proxyPort: PROXY_PORT });
 store.isBlocked = (name) => !!admin.state.blocked[name];
 store.renamePending = (name) => admin.isRenamePending(name);
+store.queueStatus = (name) => (gateConfig.queue ? approvals.status(admin.rawNameFor(name)) : null);
 
 // ---------------------------------------------------------------- dashboard accounts
 const auth = new Auth(db, {
@@ -287,7 +304,7 @@ function stopCtf() {
 }
 
 createProxy({ getTarget, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
-createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, gate, setGateConfig, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
+createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
 
 log('info', `ctf-watch v2.1 started (gate ${gateConfig.enabled ? 'on' : 'off'}, fields: ${gateConfig.fields.map((f) => f.key).join(', ')}). ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
 

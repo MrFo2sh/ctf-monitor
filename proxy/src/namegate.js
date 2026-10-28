@@ -15,11 +15,17 @@ const TYPES = ['text', 'number', 'email', 'password', 'select'];
 
 const DEFAULT_CONFIG = {
   enabled: true,
+  strict: true, // nothing reaches the CTF without the form: curl / scripts / crawlers are refused too
+  queue: true, // after the form, students wait until the organizer approves them (Queue tab)
   title: 'Welcome to the CTF',
   intro: 'Before you start, tell us who you are. Use the name your instructor knows you by.',
   button: 'Start',
+  waitTitle: 'Almost there',
+  waitText: 'Thanks {name}! The organizer will let you in shortly. This page continues by itself once you are approved.',
   fields: [{ key: 'username', label: 'Your name', type: 'text', required: true, placeholder: 'Your name', locked: true }],
 };
+const STATUS_PATH = '/__ctfwatch/status';
+const STREAM_PATH = '/__ctfwatch/wait'; // server-sent events: the waiting page learns about the decision instantly
 
 function cleanKey(k) {
   return String(k || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
@@ -29,9 +35,13 @@ function cleanKey(k) {
 function normalizeConfig(raw) {
   const cfg = { ...DEFAULT_CONFIG, ...(raw && typeof raw === 'object' ? raw : {}) };
   cfg.enabled = cfg.enabled !== false;
+  cfg.strict = cfg.strict !== false;
+  cfg.queue = cfg.queue !== false;
   cfg.title = String(cfg.title || DEFAULT_CONFIG.title).slice(0, 80);
   cfg.intro = String(cfg.intro ?? DEFAULT_CONFIG.intro).slice(0, 400);
   cfg.button = String(cfg.button || DEFAULT_CONFIG.button).slice(0, 30);
+  cfg.waitTitle = String(cfg.waitTitle || DEFAULT_CONFIG.waitTitle).slice(0, 80);
+  cfg.waitText = String(cfg.waitText || DEFAULT_CONFIG.waitText).slice(0, 400);
   const seen = new Set();
   const fields = [];
   for (const f of Array.isArray(cfg.fields) ? cfg.fields : []) {
@@ -58,17 +68,48 @@ function normalizeConfig(raw) {
 
 class NameGate {
   /**
-   * @param opts { secretFile, cookie, getConfig: () => config, onProfile: (name, profile) => void }
+   * @param opts { secretFile, cookie, getConfig: () => config, onProfile: (name, profile) => void,
+   *               approvals: Approvals (the admission queue), onEnqueue: (name, info) => void }
    */
-  constructor({ secretFile, cookie, getConfig, onProfile }) {
+  constructor({ secretFile, cookie, getConfig, onProfile, approvals, onEnqueue }) {
     this.cookie = cookie || 'ctfw_name';
     this.getConfig = getConfig || (() => DEFAULT_CONFIG);
     this.onProfile = onProfile || null;
+    this.approvals = approvals || null;
+    this.onEnqueue = onEnqueue || null;
     this.secret = this.loadSecret(secretFile);
     this.ipNames = new Map(); // ip -> { names:Set, last }
     this.revoked = new Map(); // rawName -> ts   ("ask to rename")
     this.onRename = null; // (oldRawName, newName) => void
     this.onIpNamed = null; // (ip, name) => void
+    this.waiters = new Map(); // rawName -> Set(res) of open event streams (waiting pages)
+    if (this.approvals) this.approvals.onChange((names) => this.notifyWaiters(names));
+    this.heartbeat = setInterval(() => {
+      for (const set of this.waiters.values()) for (const res of set) res.write(': ping\n\n');
+    }, 15000);
+    if (this.heartbeat.unref) this.heartbeat.unref();
+  }
+
+  // push the new status to every open waiting page of these students
+  notifyWaiters(names) {
+    for (const n of names || []) {
+      const set = this.waiters.get(n);
+      if (!set) continue;
+      const status = this.approvals ? this.approvals.status(n) || 'none' : 'approved';
+      for (const res of set) {
+        try {
+          res.write(`data: ${JSON.stringify({ status })}\n\n`);
+          if (status !== 'pending') res.end();
+        } catch {}
+      }
+      if (status !== 'pending') this.waiters.delete(n);
+    }
+  }
+  statusOf(name) {
+    const cfg = this.config;
+    if (!name) return 'none';
+    if (!cfg.queue || !this.approvals) return 'approved';
+    return this.approvals.status(name) || 'pending';
   }
 
   get config() {
@@ -191,10 +232,47 @@ class NameGate {
     return { name, profile, values };
   }
 
+  // "You must set your Your name, Student ID first" for tools hitting the proxy without the form
+  refuse(req, res, status, text) {
+    const wantsJson = String(req.headers.accept || '').includes('json');
+    res.writeHead(status, { 'Content-Type': wantsJson ? 'application/json' : 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(wantsJson ? JSON.stringify({ error: text }) : text + '\n');
+    return true;
+  }
+  requiredLabels() {
+    return this.config.fields.filter((f) => f.required).map((f) => f.label).join(', ');
+  }
+
   /** Called for every proxied request. Returns true if the gate answered it. */
   handle(req, res) {
     const cfg = this.config;
     const pathOnly = (req.url || '/').split('?')[0];
+
+    // polled by the waiting page (fallback): { status: pending | approved | blocked | none }
+    if (pathOnly === STATUS_PATH) {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ status: this.statusOf(this.nameFrom(req)) }));
+      return true;
+    }
+    // event stream held open by the waiting page: the decision arrives the moment it is made
+    if (pathOnly === STREAM_PATH) {
+      const name = this.nameFrom(req);
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+      res.write(`data: ${JSON.stringify({ status: this.statusOf(name) })}\n\n`);
+      if (name && this.statusOf(name) === 'pending') {
+        let set = this.waiters.get(name);
+        if (!set) {
+          set = new Set();
+          this.waiters.set(name, set);
+        }
+        set.add(res);
+        req.on('close', () => {
+          set.delete(res);
+          if (!set.size) this.waiters.delete(name);
+        });
+      } else res.end();
+      return true;
+    }
 
     if (pathOnly === GATE_PATH) {
       if (req.method !== 'POST') {
@@ -220,6 +298,11 @@ class NameGate {
         res.end();
         this.rememberIp(clientIp(req), v.name);
         if (this.onProfile && Object.keys(v.profile).length) this.onProfile(v.name, v.profile);
+        if (cfg.queue && this.approvals) {
+          const before = this.approvals.status(v.name);
+          this.approvals.enqueue(v.name, { profile: v.profile, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 160) });
+          if (!before && this.onEnqueue) this.onEnqueue(v.name, { ip: clientIp(req) });
+        }
         if (prev && prev !== v.name && this.revoked.has(prev)) {
           this.revoked.delete(prev);
           log('info', `gate: "${prev}" renamed themselves to "${v.name}"`);
@@ -231,23 +314,61 @@ class NameGate {
 
     if (!cfg.enabled) return false;
     const current = this.nameFrom(req);
-    if (current && this.revoked.has(current)) {
-      if (this.isNavigation(req)) {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.end(this.page(req.url || '/', 'The organizer asks you to enter your real name before continuing.'));
-      } else {
-        const msg = 'ctf-watch: the organizer asks you to re-enter your name. Open the CTF in your browser, then retry.';
-        const wantsJson = String(req.headers.accept || '').includes('json');
-        res.writeHead(428, { 'Content-Type': wantsJson ? 'application/json' : 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.end(wantsJson ? JSON.stringify({ error: msg }) : msg + '\n');
-      }
+    const nav = this.isNavigation(req);
+    const html = (body) => {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(body);
       return true;
-    }
-    if (current || !this.isNavigation(req)) return false;
+    };
 
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(this.page(req.url || '/'));
-    return true;
+    // no form filled yet
+    if (!current) {
+      if (nav) return html(this.page(req.url || '/'));
+      if (cfg.strict) return this.refuse(req, res, 428, `You must set your ${this.requiredLabels()} first: open the CTF link in your browser and fill the form, then retry (tools must send the same cookie as the browser).`);
+      return false;
+    }
+    // organizer rejected the name
+    if (this.revoked.has(current)) {
+      if (nav) return html(this.page(req.url || '/', 'The organizer asks you to enter your real name before continuing.'));
+      return this.refuse(req, res, 428, 'ctf-watch: the organizer asks you to re-enter your name. Open the CTF in your browser, then retry.');
+    }
+    // admission queue
+    if (cfg.queue && this.approvals) {
+      let st = this.approvals.status(current);
+      if (!st) {
+        // cookie from before the queue was switched on: put them in the queue now
+        this.approvals.enqueue(current, { ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 160) });
+        if (this.onEnqueue) this.onEnqueue(current, { ip: clientIp(req) });
+        st = 'pending';
+      }
+      if (st === 'blocked') return html(this.blockedPage());
+      if (st !== 'approved') {
+        if (nav) return html(this.waitPage(current));
+        return this.refuse(req, res, 428, `ctf-watch: ${current}, you are waiting for the organizer's approval. Keep the CTF page open in your browser.`);
+      }
+    }
+    return false;
+  }
+
+  waitPage(name) {
+    const cfg = this.config;
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(cfg.waitTitle)}</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0f14;color:#e6edf3;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.b{background:#111820;border:1px solid #1f2a36;border-radius:10px;padding:32px 28px;width:min(92vw,420px);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}h1{font-size:20px;margin:0 0 8px}p{color:#8b98a5;font-size:14px;margin:0 0 18px}
+.s{width:28px;height:28px;border:3px solid #2a3847;border-top-color:#3987e5;border-radius:50%;margin:0 auto;animation:r 1s linear infinite}@keyframes r{to{transform:rotate(360deg)}}.n{color:#fab219}</style></head><body>
+<div class="b"><h1>${esc(cfg.waitTitle)}</h1><p>${esc(cfg.waitText).replace(/\{name\}/g, `<span class="n">${esc(name)}</span>`)}</p><div class="s"></div></div>
+<script>(function(){
+  var done=false; function go(){ if(!done){ done=true; location.reload(); } }
+  // realtime: event stream from the proxy; the decision arrives the moment the organizer clicks
+  try { var es=new EventSource("${STREAM_PATH}"); es.onmessage=function(e){ try{ var j=JSON.parse(e.data); if(j.status!=="pending") go(); }catch(x){} }; es.onerror=function(){ /* fallback below keeps working */ }; } catch(x){}
+  // fallback: slow poll in case the stream cannot stay open through the tunnel
+  setInterval(function(){ fetch("${STATUS_PATH}",{credentials:"same-origin",headers:{"X-Requested-With":"ctf-watch-wait"}}).then(function(r){return r.json()}).then(function(j){ if(j.status!=="pending") go(); }).catch(function(){}); },10000);
+})();</script>
+</body></html>`;
+  }
+  blockedPage() {
+    return '<!doctype html><html><body style="font-family:system-ui;background:#0b0f14;color:#e6edf3;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1 style="color:#d03b3b">Access blocked</h1><p>The organizer has not admitted you to this CTF.<br>Talk to the organizer if you think this is a mistake.</p></div></body></html>';
   }
 
   page(next, error, values = {}) {
@@ -283,4 +404,4 @@ class NameGate {
   }
 }
 
-module.exports = { NameGate, GATE_PATH, DEFAULT_CONFIG, normalizeConfig, TYPES };
+module.exports = { NameGate, GATE_PATH, STATUS_PATH, STREAM_PATH, DEFAULT_CONFIG, normalizeConfig, TYPES };
