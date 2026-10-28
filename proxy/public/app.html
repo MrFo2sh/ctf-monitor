@@ -752,7 +752,8 @@
     updateActions();
   }
   function setStudentQuery(text) {
-    const q = text.trim(), exact = [...listItems.keys(), ...state.lanes.keys()].find((n) => n.toLowerCase() === q.toLowerCase());
+    const q = text.trim(), keys = [...listItems.keys(), ...state.lanes.keys()];
+    const exact = keys.find((n) => n === q) || keys.find((n) => n.toLowerCase() === q.toLowerCase());
     state.filter = exact || ''; state.query = exact ? '' : q.toLowerCase(); applyFilter();
   }
   function selectStudent(name) { $('filter').value = name; setStudentQuery(name); }

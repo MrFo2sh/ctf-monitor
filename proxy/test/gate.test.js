@@ -82,3 +82,13 @@ test('a tool refused by the strict gate is reported through onRefused with its r
   assert.equal(seen[0].status, 428);
   assert.match(seen[0].text, /form/);
 });
+
+test('a name that differs only in case from a known student keeps the known spelling', () => {
+  const g = new NameGate({ secretFile: null, getConfig: () => normalizeConfig({ enabled: true }) });
+  assert.equal(g.canonicalName('fo2sh'), 'fo2sh', 'no known names yet: the name is new');
+  g.knownNames = () => ['Fo2sh', 'alice'];
+  assert.equal(g.canonicalName('fo2sh'), 'Fo2sh');
+  assert.equal(g.canonicalName('FO2SH'), 'Fo2sh');
+  assert.equal(g.canonicalName('Alice'), 'alice');
+  assert.equal(g.canonicalName('bob'), 'bob');
+});

@@ -61,6 +61,9 @@ const gate = new NameGate({
   },
   onEnqueue: (name, info) => store.emitAlert({ type: 'queue', level: 'info', student: admin.alias(name), ip: info.ip, msg: `${name} filled the gate form and is waiting for approval (Queue tab)` }),
 });
+// Names are matched ignoring case against students already seen, so a student who types their
+// name with different capitalisation does not become a second lane.
+gate.knownNames = () => store.students.keys();
 // A request the gate turned away is still a request: it is recorded with status 428, the flag
 // `gate-refused` and its user agent, so the student card shows the tools they tried.
 gate.onRefused = (req, status) => {

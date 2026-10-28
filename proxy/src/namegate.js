@@ -109,6 +109,7 @@ class NameGate {
     this.onRename = null; // (oldRawName, newName) => void
     this.onIpNamed = null; // (ip, name) => void
     this.onRefused = null; // (req, status, text) => void: a tool or script turned away at the gate (strict mode, pending, revoked)
+    this.knownNames = null; // () => Iterable<string>: names already seen, so "Fo2sh" and "fo2sh" stay one student
     this.waiters = new Map(); // rawName -> Set(res) of open event streams (waiting pages)
     if (this.approvals) this.approvals.onChange((names) => this.notifyWaiters(names));
     this.heartbeat = setInterval(() => {
@@ -180,6 +181,14 @@ class NameGate {
     const sig = v.slice(i + 1);
     const want = this.sign(name);
     if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+    return name;
+  }
+
+  /** The spelling already in use for this name, ignoring case; the name itself when it is new. */
+  canonicalName(name) {
+    if (!name || !this.knownNames) return name;
+    const lower = name.toLowerCase();
+    for (const n of this.knownNames()) if (typeof n === 'string' && n.toLowerCase() === lower) return n;
     return name;
   }
 
@@ -338,6 +347,7 @@ class NameGate {
         let next = form.get('next') || '/';
         if (!next.startsWith('/') || next.startsWith('//')) next = '/';
         const v = this.validate(form);
+        if (!v.error) v.name = this.canonicalName(v.name);
         const html = (msg, values) => {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
           res.end(this.page(next, msg, values));

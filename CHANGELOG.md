@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.3.2 - 2026-10-28
+- Clicking a student selects exactly that student; the case-insensitive match is now only a fallback for typed searches (clicking "Fo2sh" used to select "fo2sh").
+- A gate name that differs only in case from a student already seen keeps the known spelling, so one person does not get two lanes.
+
 ## 1.3.1 - 2026-10-28
 - Requests the gate turns away (strict mode, pending approval, rejected name) are recorded as `gate-refused` requests with status 428 and the client's user agent, so a student's card lists the tools they tried (curl, wget, scripts) even though nothing reached the CTF. Before, such attempts were invisible.
 
