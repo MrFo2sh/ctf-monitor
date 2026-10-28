@@ -318,6 +318,7 @@ same database.
   actions, queries, replay, cheat sheet.
 - [`dev_docs/`](dev_docs/README.md): the developer course: the architecture map and one chapter per
   source file, walking through the code with exercises.
+- [`ISSUES.md`](ISSUES.md): known issues to address, with where they are and the intended fix.
 
 ## Troubleshooting
 
