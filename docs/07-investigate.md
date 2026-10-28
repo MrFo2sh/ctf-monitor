@@ -18,7 +18,8 @@ A full page for the student:
 - **User agents** with counts: a browser plus `python-requests` or `curl` tells you they scripted;
   `sqlmap` or `nikto` tells you they scanned.
 - **Known player across CTFs**: if the same person was seen at a previous event (same name, id,
-  email, app username or IP), their history there.
+  email, app username or, on a LAN, MAC address; the IP alone is shown but never used to match,
+  since classmates share one), their history there.
 - **Web exploitation attempts**, grouped by class, each with the request, where the payload was
   (URL, body, user agent) and the matched sample. Classes with zero hits are not shown.
 - **All requests**, newest first, up to 5000: time, IP, method, path, object id, status, size,

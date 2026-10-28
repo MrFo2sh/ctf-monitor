@@ -31,7 +31,7 @@ leaderboard and alerts.
 
 - Students' gate answers, the queue decisions, blocks, renames, the decoy list, the gate design,
   which app is behind the proxy.
-- Players: the same person at the next event is recognised by name, id, email, app username or IP,
+- Players: the same person at the next event is recognised by name, id, email, app username or MAC address (never by IP alone),
   and their history shows on the detail page.
 - The dashboard accounts do **not** persist across a restart of the monitor: they are regenerated
   and printed again.

@@ -259,7 +259,8 @@ Two switches, both on by default:
 The gate can be switched off in the tab, in which case students are identified by the app's login
 or their IP.
 
-**Players across CTFs.** Each student is linked to a player record by name, app username, IP and,
+**Players across CTFs.** Each student is linked to a player record by name, gate answers such as a
+student id or email, app username and,
 when they are on the same LAN as the VM, MAC address. The next CTF recognises them: the student
 detail view shows their history.
 

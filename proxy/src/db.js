@@ -102,10 +102,13 @@ class Db {
 
   // ---------- players (mapped across CTFs by name / username / ip) ----------
   playerFor(identities, displayName, ts) {
-    // identities: [{kind, value}] in order of trust (gate name, app username, ip)
+    // identities: [{kind, value}] in order of trust (gate name, gate id/email, app username, mac, ip).
+    // An ip is a weak identity: many people can share one (classroom NAT), so it is recorded for the
+    // history but never used to MATCH an existing player when any stronger identity is present.
+    const strong = identities.filter((i) => i.value && i.kind !== 'ip');
+    const lookupBy = strong.length ? strong : identities.filter((i) => i.value);
     let playerId = null;
-    for (const { kind, value } of identities) {
-      if (!value) continue;
+    for (const { kind, value } of lookupBy) {
       const row = this.stmts.findIdentity.get(kind, value);
       if (row) {
         playerId = row.player_id;
@@ -115,6 +118,8 @@ class Db {
     if (!playerId) {
       playerId = Number(this.stmts.insertPlayer.run(displayName, ts).lastInsertRowid);
     }
+    // upsert keeps an identity with its first player (ON CONFLICT only refreshes last_seen / ctf), so a shared ip
+    // stays attached to whoever had it first and never moves another person's record
     for (const { kind, value } of identities) if (value) this.stmts.upsertIdentity.run(playerId, kind, value, this.ctfId, ts, ts);
     return playerId;
   }

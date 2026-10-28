@@ -33,15 +33,32 @@ test('player mapping links identities across CTFs', () => {
   db.endCtf(c1.id);
   const c2 = db.openCtf('ctf-2');
   assert.notEqual(c1.id, c2.id);
-  // same person, new display name, same ip -> same player
-  const p2 = db.playerFor([{ kind: 'name', value: 'M. Gohary' }, { kind: 'ip', value: '41.1.1.1' }], 'M. Gohary', 2000);
+  // same gate name, new ip -> same player (a strong identity matched)
+  const p2 = db.playerFor([{ kind: 'name', value: 'Gohary' }, { kind: 'ip', value: '41.1.1.9' }], 'Gohary', 2000);
   assert.equal(p2, p1);
+  // same student id typed on the gate, different name and ip -> same player
+  db.playerFor([{ kind: 'gate:sid', value: '42' }, { kind: 'name', value: 'Gohary' }], 'Gohary', 2100);
+  const p3 = db.playerFor([{ kind: 'name', value: 'M. Gohary' }, { kind: 'gate:sid', value: '42' }, { kind: 'ip', value: '41.1.1.5' }], 'M. Gohary', 2200);
+  assert.equal(p3, p1);
   const other = db.playerFor([{ kind: 'name', value: 'Sara' }, { kind: 'ip', value: '41.1.1.2' }], 'Sara', 2000);
   assert.notEqual(other, p1);
   const h = db.playerHistory(p1);
-  assert.deepEqual(h.identities.map((i) => i.value).sort(), ['41.1.1.1', 'Gohary', 'M. Gohary']);
+  assert.deepEqual(h.identities.map((i) => i.value).sort(), ['41.1.1.1', '41.1.1.5', '41.1.1.9', '42', 'Gohary', 'M. Gohary']);
   assert.equal(h.ctfs.length, 1);
   assert.equal(h.ctfs[0].name, 'ctf-1');
+});
+
+test('a shared ip never merges two different people (issue 2)', () => {
+  const db = new Db(':memory:');
+  db.openCtf('class');
+  const a = db.playerFor([{ kind: 'name', value: 'Ahmed' }, { kind: 'ip', value: '197.0.0.1' }], 'Ahmed', 1000);
+  const b = db.playerFor([{ kind: 'name', value: 'Basma' }, { kind: 'ip', value: '197.0.0.1' }], 'Basma', 1001);
+  assert.notEqual(a, b, 'same classroom ip, different names: two players');
+  // the ip identity stays with its first owner and is not moved
+  assert.equal(db.stmts.findIdentity.get('ip', '197.0.0.1').player_id, a);
+  // an ip-only identity list (no stronger evidence at all) may still match by ip
+  const c = db.playerFor([{ kind: 'ip', value: '197.0.0.1' }], 'ip:197.0.0.1', 1002);
+  assert.equal(c, a);
 });
 
 test('alerts, ack and student detail aggregation', () => {
