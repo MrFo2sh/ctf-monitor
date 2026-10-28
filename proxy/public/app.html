@@ -401,8 +401,8 @@
       </div>
     </div>
     <div class="card wide">
-      <h3>Events <span><button class="small danger admin-only hidden" id="ctf-stop">■ Stop CTF</button> <button class="small admin-only" id="ctf-new">＋ New CTF</button></span></h3>
-      <table><thead><tr><th>#</th><th>name</th><th>started</th><th>ended</th><th>students</th><th>requests</th><th>alerts</th><th></th></tr></thead><tbody id="ctf-rows"></tbody></table>
+      <h3>Events <span><button class="small danger admin-only hidden" id="ctf-del" title="Delete the selected records with their requests and alerts (export first to keep a copy)">🗑 Delete selected</button> <button class="small danger admin-only hidden" id="ctf-stop">■ Stop CTF</button> <button class="small admin-only" id="ctf-new">＋ New CTF</button></span></h3>
+      <table><thead><tr><th class="admin-only"><input type="checkbox" id="ctf-all" class="m0" title="Select every record that can be deleted"></th><th>#</th><th>name</th><th>started</th><th>ended</th><th>students</th><th>requests</th><th>alerts</th><th></th></tr></thead><tbody id="ctf-rows"></tbody></table>
       <div class="admin-only row mt">
         <label class="chip">⬆ Import a ctf-*.json export <input type="file" id="ctf-import" accept=".json,application/json" style="display:none"></label>
         <span class="count" id="replay-status"></span>
@@ -1102,7 +1102,7 @@
   async function loadCtfs() {
     const [j, adm] = await Promise.all([tryApi('/api/ctfs'), tryApi('/api/admin')]); if (!j) return;
     state.ctfs = j.list; const isAdmin = state.me && state.me.role === 'admin';
-    $('ctf-rows').innerHTML = j.list.map((c) => `<tr><td>${c.id}</td><td>${esc(c.name)}${j.active && j.active.id === c.id ? ' <span class="lvl low">active</span>' : ''}${c.imported ? ' <span class="lvl info">imported</span>' : ''}</td><td>${fmtDate(c.started_at)}</td><td>${fmtDate(c.ended_at)}</td><td>${c.students}</td><td>${c.requests}</td><td>${c.alerts}</td>
+    $('ctf-rows').innerHTML = j.list.map((c) => `<tr><td class="admin-only">${j.active && j.active.id === c.id ? '' : `<input type="checkbox" class="ctf-sel m0" data-id="${c.id}">`}</td><td>${c.id}</td><td>${esc(c.name)}${j.active && j.active.id === c.id ? ' <span class="lvl low">active</span>' : ''}${c.imported ? ' <span class="lvl info">imported</span>' : ''}</td><td>${fmtDate(c.started_at)}</td><td>${fmtDate(c.ended_at)}</td><td>${c.students}</td><td>${c.requests}</td><td>${c.alerts}</td>
       <td><a href="/api/export?ctf=${c.id}" title="Download the full CTF as JSON (requests, alerts, players) - this is the file Import takes">⬇ export .json</a>${isAdmin && !(j.active && j.active.id === c.id) ? ` · <button class="small replay" data-id="${c.id}">▶ replay</button> <select class="small spd" data-id="${c.id}"><option value="1">1x</option><option value="10" selected>10x</option><option value="60">60x</option><option value="600">max</option></select>` : ''}</td></tr>`).join('');
     if (adm) {
       $('adm-blocked').innerHTML = adm.blocked.map((b) => `<li><span>${esc(b.name)}${b.ip ? ` <span class="muted">(${esc(b.ip)})</span>` : ''}</span>${isAdmin ? `<button class="small unb" data-name="${esc(b.name)}">unblock</button>` : ''}</li>`).join('') || '<li><span class="faint">nobody</span></li>';
@@ -1111,9 +1111,25 @@
     }
     $('adm-me').innerHTML = [['user', state.me.username], ['role', state.me.role], ['active CTF', j.active ? `#${j.active.id} ${j.active.name}` : '– (stopped)']].map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span>`).join('');
     $('ctf-stop').classList.toggle('hidden', !(isAdmin && j.active));
+    $('ctf-all').checked = false; updateCtfSelection();
     $('ctf-name').textContent = j.active ? j.active.name : 'no active CTF';
     $('ctf-name').style.color = j.active ? '' : 'var(--notice)';
   }
+  const ctfSelected = () => [...document.querySelectorAll('#ctf-rows .ctf-sel:checked')].map((cb) => Number(cb.dataset.id));
+  function updateCtfSelection() {
+    const n = ctfSelected().length, isAdmin = state.me && state.me.role === 'admin';
+    $('ctf-del').classList.toggle('hidden', !(isAdmin && n > 0));
+    $('ctf-del').textContent = `🗑 Delete selected${n ? ` (${n})` : ''}`;
+  }
+  $('ctf-all').addEventListener('change', () => { document.querySelectorAll('#ctf-rows .ctf-sel').forEach((cb) => { cb.checked = $('ctf-all').checked; }); updateCtfSelection(); });
+  $('ctf-rows').addEventListener('change', (e) => { if (e.target.classList.contains('ctf-sel')) updateCtfSelection(); });
+  $('ctf-del').addEventListener('click', async () => {
+    const ids = ctfSelected(); if (!ids.length) return;
+    const names = ids.map((id) => { const c = state.ctfs.find((x) => x.id === id); return c ? `#${id} ${c.name}` : `#${id}`; });
+    if (!confirm(`Delete ${ids.length} CTF record(s)?\n\n${names.join('\n')}\n\nTheir requests and alerts are removed permanently. Export first if you want to keep a copy.`)) return;
+    const j = await tryApi('/api/ctfs/delete', { ids });
+    if (j) { if (j.skipped && j.skipped.length) alert(`Kept #${j.skipped.join(', #')}: the active CTF cannot be deleted. Stop it first.`); loadCtfs(); }
+  });
   $('ctf-stop').addEventListener('click', async () => {
     if (!confirm('Stop the current CTF?\n\nThe record is closed and kept, the proxy is disconnected (students see "CTF not open yet") and the live view is cleared. Picking a CTF app again starts a new record.')) return;
     const j = await tryApi('/api/ctfs/stop', {}); if (j) { renderTarget(null); loadCtfs(); scanTargets(); }

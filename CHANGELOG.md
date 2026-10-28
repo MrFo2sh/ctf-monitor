@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.3.0 - 2026-10-28
+- CTFs tab: select one or many event records and delete them (admin only, with a confirmation that lists them). Requests and alerts of those CTFs are removed in one transaction; the active CTF and a CTF being replayed are refused. `POST /api/ctfs/delete { ids }`.
+
 ## 1.2.1 - 2026-10-28
 - The student-facing gate pages (form, waiting page, blocked page) wear the same phosphor theme as the dashboard. The proxy serves the two fonts itself under `/__ctfwatch/fonts/`, so students need no internet access; the Gate tab's live preview loads them through the dashboard.
 

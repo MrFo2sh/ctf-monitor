@@ -93,6 +93,38 @@ class Db {
     this.db.prepare('UPDATE ctfs SET ended_at = ? WHERE id = ? AND ended_at IS NULL').run(Date.now(), id);
     if (this.ctfId === id) this.ctfId = null; // nothing is recorded until a CTF is opened again
   }
+  /**
+   * Delete whole CTF records with their requests and alerts. The active CTF is never deleted
+   * (it is skipped); identities keep the player but forget which CTF last saw them.
+   * Returns the ids that were actually removed.
+   */
+  deleteCtfs(ids) {
+    const want = [...new Set((ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+    if (!want.length) return [];
+    this.flush();
+    const active = this.activeCtf();
+    const marks = want.map(() => '?').join(',');
+    const targets = this.db
+      .prepare(`SELECT id FROM ctfs WHERE id IN (${marks})`)
+      .all(...want)
+      .map((r) => Number(r.id))
+      .filter((id) => !active || id !== active.id);
+    if (!targets.length) return [];
+    const m = targets.map(() => '?').join(',');
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare(`DELETE FROM alerts WHERE ctf_id IN (${m})`).run(...targets);
+      this.db.prepare(`DELETE FROM requests WHERE ctf_id IN (${m})`).run(...targets);
+      this.db.prepare(`UPDATE identities SET ctf_id = NULL WHERE ctf_id IN (${m})`).run(...targets);
+      this.db.prepare(`DELETE FROM ctfs WHERE id IN (${m})`).run(...targets);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    log('info', `db: deleted CTF record(s) ${targets.join(', ')}`);
+    return targets;
+  }
   listCtfs() {
     return this.db
       .prepare(`SELECT c.*, (SELECT COUNT(*) FROM requests r WHERE r.ctf_id = c.id) AS requests, (SELECT COUNT(*) FROM alerts a WHERE a.ctf_id = c.id) AS alerts,

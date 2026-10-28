@@ -244,6 +244,17 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
       if (adminOnly()) return;
       return json(res, 200, { ok: true, ended: stopCtf() });
     }
+    if (url === '/api/ctfs/delete' && req.method === 'POST') {
+      if (adminOnly()) return;
+      const body = await readJson(req).catch(() => ({}));
+      const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
+      if (!ids.length) return json(res, 400, { error: 'ids required' });
+      if (store.replayCtfId && ids.includes(Number(store.replayCtfId))) return json(res, 409, { error: `CTF #${store.replayCtfId} is being replayed; stop the replay first` });
+      const deleted = db.deleteCtfs(ids);
+      const skipped = ids.filter((id) => !deleted.includes(id));
+      log('info', `admin ${user.username} deleted CTF record(s) ${deleted.join(', ') || '(none)'}${skipped.length ? `; kept ${skipped.join(', ')}` : ''}`);
+      return json(res, 200, { ok: true, deleted, skipped });
+    }
 
     // ---- query: distinct values for autocomplete (whitelisted columns only)
     if (url === '/api/query/values') {

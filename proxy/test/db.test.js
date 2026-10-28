@@ -132,3 +132,25 @@ test('a failed import leaves no half-imported CTF behind (issue 4)', () => {
   assert.throws(() => db.importCtf(bad));
   assert.equal(db.listCtfs().length, before, 'no "(imported)" record must remain');
 });
+
+test('deleteCtfs removes records with their requests and alerts but never the active CTF', () => {
+  const db = new Db(':memory:');
+  const c1 = db.openCtf('old');
+  db.addRequest(ev({}));
+  db.addRequest(ev({ student: 'bob' }));
+  db.flush();
+  db.addAlert({ ts: Date.now(), level: 'high', type: 'idor-attempt', student: 'bob', ip: '10.0.0.2', msg: 'x', data: {} });
+  db.endCtf(c1.id);
+  const c2 = db.openCtf('live');
+  db.addRequest(ev({ student: 'carol' }));
+  db.flush();
+  const gone = db.deleteCtfs([c1.id, c2.id, 999]);
+  assert.deepEqual(gone, [c1.id], 'only the ended record goes; the active one and unknown ids are skipped');
+  const left = db.listCtfs();
+  assert.equal(left.length, 1);
+  assert.equal(left[0].id, c2.id);
+  assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM requests WHERE ctf_id = ?').get(c1.id).n, 0);
+  assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM alerts WHERE ctf_id = ?').get(c1.id).n, 0);
+  assert.equal(db.db.prepare('SELECT COUNT(*) AS n FROM requests WHERE ctf_id = ?').get(c2.id).n, 1);
+  assert.deepEqual(db.deleteCtfs([]), []);
+});
