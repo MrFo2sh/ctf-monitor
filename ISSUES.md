@@ -23,11 +23,11 @@ Items are ordered by how much they matter during a real event.
 - **What**: on an exception the transaction is rolled back and the batch is dropped (logged). A disk-full or a locked database loses up to 200 ms of requests.
 - **Fix**: keep the batch on failure and retry on the next flush, with a cap; raise a critical alert when retries fail.
 
-## 4. Import inserts the CTF row outside its transaction
+## 4. Import inserts the CTF row outside its transaction — FIXED
 
 - **Where**: `proxy/src/db.js` `importCtf()`.
-- **What**: the `ctfs` row is inserted before `BEGIN`; if the requests insert fails, an empty "(imported)" record is left behind.
-- **Fix**: move the `ctfs` insert inside the transaction.
+- **What**: the `ctfs` row was inserted before `BEGIN`; if the requests insert failed, an empty "(imported)" record was left behind.
+- **Fix applied**: the `ctfs` insert is inside the transaction; a failing import rolls back completely. Test: `db.test.js` "a failed import leaves no half-imported CTF behind".
 
 ## 5. Rename does not rewrite everything
 
@@ -41,17 +41,17 @@ Items are ordered by how much they matter during a real event.
 - **What**: `curl/`, `wget/`, `python-requests/` and `go-http-client` are flagged as scanners (medium). In a CTF where scripting is allowed this is noise.
 - **Fix**: split into `scanner` (sqlmap, nikto, nuclei…) and `tool` (curl, requests…) with level `info`, or make the list configurable in `rules.json`.
 
-## 7. Query scope is disabled by the word "ctf" anywhere
+## 7. Query scope is disabled by the word "ctf" anywhere — FIXED
 
 - **Where**: `proxy/src/query.js` `compile()`.
-- **What**: the automatic "current CTF only" scope is dropped when the raw query text matches `\bctf\b`, including inside a string value such as `path ~ "/ctf/flag"`.
-- **Fix**: decide from the parsed AST (a `cmp`/`in` node on field `ctf`) instead of the raw text.
+- **What**: the automatic "current CTF only" scope was dropped when the raw query text matched `\bctf\b`, including inside a string value such as `path ~ "/ctf/flag"`.
+- **Fix applied**: `mentionsCtf(ast)` walks the parsed tree and only a condition on the `ctf` field disables the scope. Test: `query.test.js` "the word ctf inside a value does not disable the scope".
 
-## 8. Attack samples are not masked
+## 8. Attack samples are not masked — FIXED
 
-- **Where**: `proxy/src/attacks.js` `classify()`; shown in alerts, the Requests sidebar and student detail pages.
-- **What**: the 120-character sample around a match is taken from the decoded request; a payload inside a password field would appear unmasked.
-- **Fix**: run the sample through `mask.maskText` and skip fields named in `masking.fields` when scanning bodies.
+- **Where**: `proxy/src/pipeline.js` (caller of `attacks.classify()`), `proxy/src/mask.js`.
+- **What**: the 120-character sample around a match was taken from the decoded request; a payload inside a password field would have appeared unmasked in alerts and detail pages.
+- **Fix applied**: the body is passed through the new `maskBodyText()` (values of sensitive fields replaced by `***`, structure kept, JSON and form bodies), the URL through `maskUrl()`, and every sample through `maskText()`. The golden replay shows no change in classification. Test: `core.test.js` "maskBodyText hides secret values…".
 
 ## 9. Secrets in `logs/credentials.txt` and in the container log
 
