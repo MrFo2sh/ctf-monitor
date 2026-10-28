@@ -189,7 +189,7 @@ class Store {
       const fresh = ev.attacks.filter((a) => s.attacks[a.cls] === 1 || s.attacks[a.cls] % 10 === 0);
       if (!fresh.length) return null;
       type = 'web-attack';
-      level = fresh.reduce((w, a) => (LEVELS.indexOf(a.level) > LEVELS.indexOf(w) ? a.level : w), 'low');
+      level = fresh.reduce((w, a) => (LEVELS.indexOf(a.level) > LEVELS.indexOf(w) ? a.level : w), 'info'); // a tool-only hit stays an info alert
       msg = `${ev.student}: ${fresh.map((a) => `${a.label} (${a.where}: ${a.sample})`).join('; ')} - ${ev.method} ${ev.path}`;
     } else if (ev.flags.includes('burst-errors') && (s.bursts === 1 || s.bursts % 25 === 0)) {
       type = 'burst-errors';
