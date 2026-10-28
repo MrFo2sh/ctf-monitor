@@ -68,3 +68,17 @@ test('disabled gate never intercepts; enabled gate intercepts only browser navig
   cfg = cfgOff;
   assert.equal(g.handle(nav, mkRes()), false);
 });
+
+test('a tool refused by the strict gate is reported through onRefused with its request', () => {
+  const g = new NameGate({ secretFile: null, getConfig: () => normalizeConfig({ enabled: true, strict: true, queue: false }) });
+  const seen = [];
+  g.onRefused = (req, status, text) => seen.push({ ua: req.headers['user-agent'], status, text });
+  const req = { method: 'GET', url: '/api/orders/1', headers: { 'user-agent': 'Wget/1.21.4', accept: '*/*' }, socket: { remoteAddress: '10.0.0.9' } };
+  const r = { code: null, body: '', writeHead(c) { r.code = c; return r; }, end(b) { r.body = String(b || ''); } };
+  assert.equal(g.handle(req, r), true, 'the gate answers the request');
+  assert.equal(r.code, 428);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].ua, 'Wget/1.21.4');
+  assert.equal(seen[0].status, 428);
+  assert.match(seen[0].text, /form/);
+});

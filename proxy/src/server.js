@@ -61,6 +61,12 @@ const gate = new NameGate({
   },
   onEnqueue: (name, info) => store.emitAlert({ type: 'queue', level: 'info', student: admin.alias(name), ip: info.ip, msg: `${name} filled the gate form and is waiting for approval (Queue tab)` }),
 });
+// A request the gate turned away is still a request: it is recorded with status 428, the flag
+// `gate-refused` and its user agent, so the student card shows the tools they tried.
+gate.onRefused = (req, status) => {
+  req.resume();
+  onEvent({ ts: Date.now(), req, method: req.method, url: req.url || '/', pathOnly: (req.url || '/').split('?')[0], status, size: 0, latencyMs: 0, reqLen: 0, reqBuf: Buffer.alloc(0), resHeaders: {}, resBuf: Buffer.alloc(0), error: 'gate' });
+};
 // decisions from the Queue tab: block also blocks at the proxy level (name + ip)
 function queueDecide(names, status, by) {
   const changed = approvals[status === 'approved' ? 'approve' : status === 'blocked' ? 'block' : 'reset'](names, by);

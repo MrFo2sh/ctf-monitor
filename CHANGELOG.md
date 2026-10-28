@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.3.1 - 2026-10-28
+- Requests the gate turns away (strict mode, pending approval, rejected name) are recorded as `gate-refused` requests with status 428 and the client's user agent, so a student's card lists the tools they tried (curl, wget, scripts) even though nothing reached the CTF. Before, such attempts were invisible.
+
 ## 1.3.0 - 2026-10-28
 - CTFs tab: select one or many event records and delete them (admin only, with a confirmation that lists them). Requests and alerts of those CTFs are removed in one transaction; the active CTF and a CTF being replayed are refused. `POST /api/ctfs/delete { ids }`.
 

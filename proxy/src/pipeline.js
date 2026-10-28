@@ -21,13 +21,14 @@ function buildEvent(x, deps) {
   const { getConfig, identity, detector, alias, profiles, playerIdFor, isDecoy } = deps;
   const cfg = getConfig();
   const blockedReq = x.error === 'blocked';
+  const gateReq = x.error === 'gate'; // refused at the name gate: nothing reached the CTF, but the attempt counts
   const reqBody = parseBody(x.req.headers['content-type'], x.reqBuf);
   const resBody = parseBody(x.resHeaders['content-type'], x.resBuf);
   const ip = clientIp(x.req);
 
   // identity: learn first (a login / whoami may teach a session -> name), then resolve
   const pre = identity.resolve(x.req);
-  const learned = blockedReq ? null : identity.learn({ req: x.req, identity: pre, reqBody, status: x.status, resHeaders: x.resHeaders, resBody, pathOnly: x.pathOnly });
+  const learned = blockedReq || gateReq ? null : identity.learn({ req: x.req, identity: pre, reqBody, status: x.status, resHeaders: x.resHeaders, resBody, pathOnly: x.pathOnly });
   let who = identity.resolve(x.req);
   if (learned && (who.source === 'ip' || who.name.startsWith('sess-'))) who = { ...who, name: learned.name, id: learned.id || who.id, source: 'login' };
   if (learned && (who.source === 'name' || who.source === 'ip-match')) who = { ...who, id: who.id || learned.id || null, appName: who.appName || learned.name };
@@ -40,8 +41,8 @@ function buildEvent(x, deps) {
     if (keys.length && keys.every((k) => /^(error|err|message|msg|success|status)$/i.test(k))) hasData = false;
   }
 
-  const verdict = blockedReq
-    ? { endpoint: null, objectId: null, owner: null, ownerBasis: null, mine: null, seq: null, sequential: false, distinctIds: 0, flags: ['blocked'], severity: 'notice' }
+  const verdict = blockedReq || gateReq
+    ? { endpoint: null, objectId: null, owner: null, ownerBasis: null, mine: null, seq: null, sequential: false, distinctIds: 0, flags: [blockedReq ? 'blocked' : 'gate-refused'], severity: 'notice' }
     : detector.analyze({ student: who, method: x.method, pathOnly: x.pathOnly, url: x.url, status: x.status, size: x.size, hasData, reqBody, ts: x.ts });
 
   // web exploitation attempts (SQLi, XSS, SSTI, LFI, shells, scanners...)

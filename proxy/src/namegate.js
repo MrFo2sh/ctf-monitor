@@ -108,6 +108,7 @@ class NameGate {
     this.revoked = new Map(); // rawName -> ts   ("ask to rename")
     this.onRename = null; // (oldRawName, newName) => void
     this.onIpNamed = null; // (ip, name) => void
+    this.onRefused = null; // (req, status, text) => void: a tool or script turned away at the gate (strict mode, pending, revoked)
     this.waiters = new Map(); // rawName -> Set(res) of open event streams (waiting pages)
     if (this.approvals) this.approvals.onChange((names) => this.notifyWaiters(names));
     this.heartbeat = setInterval(() => {
@@ -263,6 +264,14 @@ class NameGate {
     const wantsJson = String(req.headers.accept || '').includes('json');
     res.writeHead(status, { 'Content-Type': wantsJson ? 'application/json' : 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(wantsJson ? JSON.stringify({ error: text }) : text + '\n');
+    // The organizer still wants to see the attempt: who tried curl / wget / a script before the form.
+    if (this.onRefused) {
+      try {
+        this.onRefused(req, status, text);
+      } catch (err) {
+        log('error', `gate onRefused failed: ${err.message}`);
+      }
+    }
     return true;
   }
   requiredLabels() {
