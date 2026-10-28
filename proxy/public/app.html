@@ -448,7 +448,7 @@
       <div class="admin-only">
         <div class="row mb">
           <label class="chip"><input class="m0" type="checkbox" id="gt-enabled"> gate enabled (students must fill it before they can play)</label>
-          <label class="chip" title="Off: only browser page loads are asked; curl and scripts pass. On: nothing reaches the CTF without the form."><input class="m0" type="checkbox" id="gt-strict"> strict: refuse curl / scripts / crawlers without the form</label>
+          <label class="chip" title="Off: only browser page loads are asked; curl and scripts pass. On: nothing reaches the CTF without the form, except tools from an address whose student already filled it."><input class="m0" type="checkbox" id="gt-strict"> strict: refuse curl / scripts / crawlers without the form</label>
           <label class="chip" title="Students wait on a page until you approve them in the Queue tab"><input class="m0" type="checkbox" id="gt-queue"> queue: students wait for your approval</label>
         </div>
         <div class="grid2 form">
@@ -480,7 +480,7 @@
     <div class="card">
       <h3>How it behaves</h3>
       <ul class="notes">
-        <li><b>Strict</b> (default): nothing reaches the CTF without the form. A browser gets the form; curl, scripts and crawlers get a refusal that names the required fields. Tools must send the browser's cookie. Switched off, only browser page loads are asked and tools pass.</li>
+        <li><b>Strict</b> (default): nothing reaches the CTF without the form. A browser gets the form; curl, scripts and crawlers from an unknown address get a refusal that names the required fields, and the attempt is recorded. Tools from an address where exactly one student already filled the form pass as that student; on a shared address they must send the browser's cookie. Switched off, only browser page loads are asked and tools pass.</li>
         <li><b>Queue</b> (default): after the form the student sees a waiting page and gets in the instant you approve them in the Queue tab. Blocking from the queue also blocks them at the proxy.</li>
         <li>The username goes into a signed cookie (30 days). Requests from the same IP without the cookie are matched to it, unless two students share that IP.</li>
         <li>"Ask to rename" on a student rejects their name: their browser shows this form again and their other requests are refused until they answer.</li>

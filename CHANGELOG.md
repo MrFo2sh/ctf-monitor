@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.3.3 - 2026-10-28
+- Strict gate: a tool without the cookie coming from an address where exactly one student already filled the form passes as that student (curl, wget and scripts from the same machine after the browser signed in). Unknown and shared addresses are still refused and recorded. Browsers without the cookie still get the form.
+
 ## 1.3.2 - 2026-10-28
 - Clicking a student selects exactly that student; the case-insensitive match is now only a fallback for typed searches (clicking "Fo2sh" used to select "fo2sh").
 - A gate name that differs only in case from a student already seen keeps the known spelling, so one person does not get two lanes.

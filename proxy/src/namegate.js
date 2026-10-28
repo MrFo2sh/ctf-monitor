@@ -375,8 +375,11 @@ class NameGate {
     }
 
     if (!cfg.enabled) return false;
-    const current = this.nameFrom(req);
     const nav = this.isNavigation(req);
+    // A tool without the cookie, from an address that one student has already filled the form on, is
+    // that student: curl / wget / scripts from the same machine pass once the browser signed in.
+    // A browser without the cookie still gets the form (someone else may be on that machine).
+    const current = this.nameFrom(req) || (nav ? null : this.nameForIp(clientIp(req)));
     const html = (body) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(body);

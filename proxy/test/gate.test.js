@@ -92,3 +92,25 @@ test('a name that differs only in case from a known student keeps the known spel
   assert.equal(g.canonicalName('Alice'), 'alice');
   assert.equal(g.canonicalName('bob'), 'bob');
 });
+
+test('strict mode lets a cookieless tool through from an address that one student already named', () => {
+  const g = new NameGate({ secretFile: null, getConfig: () => normalizeConfig({ enabled: true, strict: true, queue: false }) });
+  const mk = (ip) => ({ method: 'GET', url: '/api/orders/1', headers: { 'user-agent': 'Wget/1.21.4', accept: '*/*' }, socket: { remoteAddress: ip } });
+  const res = () => { const r = { code: null, writeHead(c) { r.code = c; return r; }, end() {} }; return r; };
+  g.rememberIp('10.0.0.9', 'Fo2sh');
+  assert.equal(g.handle(mk('10.0.0.9'), res()), false, 'known address, one student: the request is proxied');
+  const unknown = res();
+  assert.equal(g.handle(mk('10.0.0.77'), unknown), true);
+  assert.equal(unknown.code, 428, 'unknown address: refused');
+  g.rememberIp('10.0.0.9', 'Bob');
+  const shared = res();
+  assert.equal(g.handle(mk('10.0.0.9'), shared), true);
+  assert.equal(shared.code, 428, 'shared address: the cookie is required again');
+  // a browser without the cookie still gets the form, even from the known address
+  const nav = { method: 'GET', url: '/', headers: { accept: 'text/html', 'user-agent': 'Mozilla/5.0' }, socket: { remoteAddress: '10.0.0.9' } };
+  const page = { code: null, body: '', writeHead(c) { page.code = c; return page; }, end(b) { page.body = String(b); } };
+  g.rememberIp('10.0.0.8', 'Carol');
+  nav.socket.remoteAddress = '10.0.0.8';
+  assert.equal(g.handle(nav, page), true);
+  assert.match(page.body, /<form/);
+});
