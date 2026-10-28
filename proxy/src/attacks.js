@@ -56,6 +56,8 @@ function classify({ url, bodyText, ua, referer }) {
     }
     for (const [where, text] of places) {
       if (!text || seen.has(c.cls)) continue;
+      // a Referer naturally contains the site's own URL (localhost / 127.0.0.1 while testing): never an SSRF or redirect probe
+      if (where === 'referer' && (c.cls === 'ssrf' || c.cls === 'redirect')) continue;
       for (const re of c.re) {
         const m = re.exec(text);
         if (m) {

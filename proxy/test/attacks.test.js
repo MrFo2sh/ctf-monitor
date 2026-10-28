@@ -21,6 +21,13 @@ test('classic injection probes are classified', () => {
   assert.ok(classes({ url: '/fetch?url=http://169.254.169.254/latest/meta-data/' }).includes('ssrf'));
 });
 
+test('a Referer pointing at the site itself (localhost while testing) is not an SSRF or redirect probe', () => {
+  assert.deepEqual(classes({ url: '/api/progress', referer: 'http://localhost:8888/tickets', ua: 'Mozilla/5.0' }), []);
+  assert.deepEqual(classes({ url: '/tickets', referer: 'http://127.0.0.1:8888/?next=http://evil.io' }), []);
+  // but a payload in the referer is still seen
+  assert.ok(classes({ url: '/', referer: "http://x/?q=' OR 1=1--" }).includes('sqli'));
+});
+
 test('double URL encoding is decoded before matching', () => {
   assert.ok(classes({ url: '/f?p=%252e%252e%252f%252e%252e%252fetc%252fpasswd' }).includes('lfi'));
 });

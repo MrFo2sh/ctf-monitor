@@ -68,6 +68,16 @@
   pre.sql { font-family:var(--mono); font-size:11px; color:var(--muted); background:var(--panel-2); padding:6px 8px; border-radius:4px; overflow:auto; margin:6px 0 }
   .ex { color:var(--accent); cursor:pointer; font-family:var(--mono); font-size:11px; margin-right:12px }
 
+  /* ---- requests view ---- */
+  #rq-grid { position:absolute; inset:0; display:grid; grid-template-columns:1fr 400px }
+  #rq-main { overflow:auto; min-width:0 } #rq-main .view-head { top:0 } #rq-main th { top:41px }
+  #rq-side { border-left:1px solid var(--border); background:var(--panel-2); overflow-y:auto }
+  #rq-rows tr.sel td { background:rgba(57,135,229,.18) !important; box-shadow:inset 3px 0 0 var(--accent) }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:3px 10px; font-size:12px } .kv .k { color:var(--muted); white-space:nowrap } .kv .v { font-family:var(--mono); overflow-wrap:anywhere }
+  .kv .v.path { color:var(--notice) }
+  pre.body { font-family:var(--mono); font-size:11px; background:var(--panel-2); border:1px solid var(--border); border-radius:4px; padding:6px 8px; white-space:pre-wrap; overflow-wrap:anywhere; max-height:200px; overflow:auto; margin:4px 0 0 }
+  @media (max-width:1000px) { #rq-grid { position:static; grid-template-columns:1fr } #rq-side { border-left:0; border-top:1px solid var(--border) } }
+
   /* ---- live view (lanes) ---- */
   #live-grid { display:grid; grid-template-columns:1fr 380px; grid-template-rows:1fr auto; position:absolute; inset:0 }
   #lanes { overflow-y:auto; padding:10px 12px; grid-row:1; grid-column:1 }
@@ -121,6 +131,7 @@
   <div class="brand"><span class="live" id="live"></span> CTF Watch <span class="badge demo hidden" id="demo-badge" title="fake students are playing (Playground tab)">MOCK TRAFFIC</span><span class="badge replay hidden" id="replay-badge">REPLAY</span></div>
   <nav id="nav">
     <button data-view="live">Live</button>
+    <button data-view="requests">Requests</button>
     <button data-view="alerts">Alerts <span class="cnt hidden" id="nav-alerts"></span></button>
     <button data-view="students">Students</button>
     <button data-view="query">Query</button>
@@ -196,9 +207,32 @@
   </aside>
   <div id="table-wrap">
     <h3><span id="table-toggle" style="cursor:pointer">Recent requests <span id="table-hint" style="color:var(--faint);font-weight:400">▾ collapse</span></span>
-      <span><input id="table-search" class="small" placeholder="🔍 path, id, status, flag…" autocomplete="off" style="width:220px;padding:2px 8px;font:11px var(--mono)"> <button class="small" id="table-expand">⤢ Expand</button> <button class="small" data-open="/requests">↗ New tab</button></span></h3>
+      <span><input id="table-search" class="small" placeholder="🔍 path, id, status, flag…" autocomplete="off" style="width:220px;padding:2px 8px;font:11px var(--mono)"> <button class="small" id="table-expand">⤢ Expand</button> <button class="small" id="table-newtab" title="Open the full live request log in a new tab">↗ New tab</button></span></h3>
     <table><thead><tr><th>time</th><th>student</th><th>method</th><th>path</th><th>id</th><th>status</th><th>bytes</th><th>ms</th><th>flags</th></tr></thead><tbody id="rows"></tbody></table>
   </div>
+</div>
+</section>
+
+<!-- ============================ REQUESTS ============================ -->
+<section class="view" id="view-requests">
+<div id="rq-grid">
+  <div id="rq-main">
+    <div class="view-head">
+      <h2>Requests</h2>
+      <input id="rq-search" placeholder="🔍 path, id, status, flag, student…" style="width:260px">
+      <input id="rq-student" placeholder="student" style="width:150px" list="students-list">
+      <span id="rq-count" style="color:var(--muted);font-family:var(--mono);font-size:11px"></span>
+      <div class="spacer"></div>
+      <button id="rq-pause">⏸ Pause</button>
+      <button class="small" id="rq-clear">Clear</button>
+      <button class="small" data-open="/requests">↗</button>
+    </div>
+    <table><thead><tr><th>time</th><th>student</th><th>ip</th><th>method</th><th>path</th><th>id</th><th>status</th><th>bytes</th><th>ms</th><th>flags</th></tr></thead><tbody id="rq-rows"></tbody></table>
+  </div>
+  <aside id="rq-side">
+    <div class="panel" id="rq-req"><h3>Request</h3><div class="empty" style="padding:30px 10px">Click a request to see its content.</div></div>
+    <div class="panel hidden" id="rq-card"></div>
+  </aside>
 </div>
 </section>
 
@@ -433,10 +467,9 @@
   const tryApi = (p, b, m) => api(p, b, m).catch((e) => { alert(e.message); return null; });
 
   // ---------- routing ----------
-  const VIEWS = ['live', 'alerts', 'students', 'query', 'ctfs', 'gate', 'playground'];
+  const VIEWS = ['live', 'requests', 'alerts', 'students', 'query', 'ctfs', 'gate', 'playground'];
   function viewFromPath(p) {
     if (p.startsWith('/students')) return 'students';
-    if (p === '/requests') return 'live';
     const v = p.replace(/^\//, '');
     return VIEWS.includes(v) ? v : 'live';
   }
@@ -445,6 +478,7 @@
     for (const x of VIEWS) $('view-' + x).classList.toggle('on', x === v);
     for (const b of $('nav').children) b.classList.toggle('on', b.dataset.view === v);
     if (push) history.pushState(null, '', '/' + (v === 'live' ? '' : v));
+    if (v === 'requests') { rqApplyFilter(); }
     if (v === 'alerts') loadAlerts();
     if (v === 'students') renderStudentsTable();
     if (v === 'ctfs') { loadCtfs(); scanTargets(); }
@@ -579,25 +613,26 @@
     for (const [name, li] of listItems) if (!seen.has(name)) { li.remove(); listItems.delete(name); }
   }
   function selectedStudent() { return state.stats && state.stats.students.find((s) => s.name === state.filter); }
+  // the student card body, shared by the Live sidebar and the Requests sidebar
+  function cardGridHtml(s) {
+    const rows = [['identified by', s.source], ['app username', (s.appNames && s.appNames.length ? s.appNames.join(', ') : s.appName) || '–'], ['user id', s.id || '–'], ['player #', s.playerId || '–'], ['first seen', fmtTime(s.firstSeen)], ['last seen', fmtTime(s.lastSeen)],
+      ['requests', `${s.requests} (${s.failed} failed)`], ['IDOR', `${s.idorAttempts} attempts · ${s.idorSuccess} successful`], ['distinct IDs', s.distinctIds]];
+    for (const [k, v] of Object.entries(s.profile || {})) if (!k.startsWith('_')) rows.push(['🪪 ' + k, v]); // answers to the extra gate fields
+    if (s.renamePending) rows.push(['rename', 'requested - waiting for the student']);
+    return rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span>`).join('');
+  }
+  function cardIpsHtml(s) { const ips = Object.entries(s.ips || {}).sort((a, b) => b[1].last - a[1].last), mx = Math.max(1, ...ips.map(([, e]) => e.n)); return ips.map(([ip, e]) => `<li><span class="w" style="--w:${(e.n / mx) * 100}%">${esc(ip)}</span><span class="n">${e.n} req · ${fmtTime(e.last)}</span></li>`).join('') || '<li><span style="color:var(--faint)">none yet</span></li>'; }
+  function cardUasHtml(s) { const uas = Object.entries(s.uas || {}).sort((a, b) => b[1] - a[1]), umx = Math.max(1, ...uas.map(([, n]) => n)); return uas.map(([ua, n]) => `<li><span class="w" style="--w:${(n / umx) * 100}%;font-family:var(--mono);font-size:11px" title="${esc(ua)}">${esc(ua || '(none)')}</span><span class="n">${n}</span></li>`).join('') || '<li><span style="color:var(--faint)">none yet</span></li>'; }
+  function cardAttacksHtml(s) { const att = Object.entries(s.attacks || {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]), amx = Math.max(1, ...att.map(([, n]) => n)); return att.map(([c, n]) => `<li><span class="w" style="--w:${(n / amx) * 100}%"><span class="flag attack">${esc(c)}</span></span><span class="n" title="${n}">${fmtCount(n)}</span></li>`).join(''); }
   function updateActions() {
     const s = selectedStudent(); $('student-card').classList.toggle('hidden', !s);
     if (!s) return;
     $('btn-block').textContent = s.blocked ? '✅ Unblock' : '⛔ Block'; $('btn-block').classList.toggle('danger', !s.blocked); $('btn-ask-rename').classList.toggle('hidden', !!s.renamePending);
     $('sc-av').style.background = colorFor(s.name); $('sc-nm').textContent = s.name; $('sc-blocked').classList.toggle('hidden', !s.blocked);
-    const rows = [['identified by', s.source], ['app username', (s.appNames && s.appNames.length ? s.appNames.join(', ') : s.appName) || '–'], ['user id', s.id || '–'], ['player #', s.playerId || '–'], ['first seen', fmtTime(s.firstSeen)], ['last seen', fmtTime(s.lastSeen)],
-      ['requests', `${s.requests} (${s.failed} failed)`], ['IDOR', `${s.idorAttempts} attempts · ${s.idorSuccess} successful`], ['distinct IDs', s.distinctIds]];
-    for (const [k, v] of Object.entries(s.profile || {})) if (!k.startsWith('_')) rows.push(['🪪 ' + k, v]); // answers to the extra gate fields
-    if (s.renamePending) rows.push(['rename', 'requested - waiting for the student']);
-    $('sc-grid').innerHTML = rows.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(v)}</span>`).join('');
-    const ips = Object.entries(s.ips || {}).sort((a, b) => b[1].last - a[1].last), mx = Math.max(1, ...ips.map(([, e]) => e.n));
-    $('sc-ips').innerHTML = ips.map(([ip, e]) => `<li><span class="w" style="--w:${(e.n / mx) * 100}%">${esc(ip)}</span><span class="n">${e.n} req · ${fmtTime(e.last)}</span></li>`).join('') || '<li><span style="color:var(--faint)">none yet</span></li>';
-    // user agents, most used first
-    const uas = Object.entries(s.uas || {}).sort((a, b) => b[1] - a[1]), umx = Math.max(1, ...uas.map(([, n]) => n));
-    $('sc-uas').innerHTML = uas.map(([ua, n]) => `<li><span class="w" style="--w:${(n / umx) * 100}%;font-family:var(--mono);font-size:11px" title="${esc(ua)}">${esc(ua || '(none)')}</span><span class="n">${n}</span></li>`).join('') || '<li><span style="color:var(--faint)">none yet</span></li>';
-    // attack classes: only the ones with hits, box hidden when there are none
-    const att = Object.entries(s.attacks || {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]), amx = Math.max(1, ...att.map(([, n]) => n));
-    $('sc-att-box').classList.toggle('hidden', !att.length);
-    $('sc-attacks').innerHTML = att.map(([c, n]) => `<li><span class="w" style="--w:${(n / amx) * 100}%"><span class="flag attack">${esc(c)}</span></span><span class="n" title="${n}">${fmtCount(n)}</span></li>`).join('');
+    $('sc-grid').innerHTML = cardGridHtml(s);
+    $('sc-ips').innerHTML = cardIpsHtml(s);
+    $('sc-uas').innerHTML = cardUasHtml(s);
+    const att = cardAttacksHtml(s); $('sc-att-box').classList.toggle('hidden', !att); $('sc-attacks').innerHTML = att;
   }
   function applyFilter() {
     for (const L of state.lanes.values()) L.el.classList.toggle('hidden', !studentMatches(L.name));
@@ -621,9 +656,65 @@
   $('table-toggle').addEventListener('click', () => { const w = $('table-wrap'); w.classList.toggle('collapsed'); $('table-hint').textContent = w.classList.contains('collapsed') ? '▸ expand' : '▾ collapse'; });
   $('table-expand').addEventListener('click', () => { const w = $('table-wrap'); w.classList.remove('collapsed'); w.classList.toggle('expanded'); $('table-expand').textContent = w.classList.contains('expanded') ? '⤡ Shrink' : '⤢ Expand'; });
   $('btn-detail').addEventListener('click', () => state.filter && window.open('/students/' + encodeURIComponent(state.filter), '_blank'));
+  $('table-newtab').addEventListener('click', () => window.open('/requests' + (state.filter ? '?student=' + encodeURIComponent(state.filter) : ''), '_blank'));
   $('btn-block').addEventListener('click', async () => { const s = selectedStudent(); if (!s) return; if (s.blocked) return tryApi('/api/admin/unblock', { student: s.name }); if (confirm(`Block "${s.name}"?\n\nEvery request from this student (and their IP, unless shared) gets "Access blocked" from the proxy.`)) await tryApi('/api/admin/block', { student: s.name }); });
   $('btn-ask-rename').addEventListener('click', async () => { if (state.filter && confirm(`Ask "${state.filter}" to enter a different name?\n\nTheir browser shows the name page again and other requests are refused until they do.`)) await tryApi('/api/admin/require-rename', { student: state.filter }); });
   $('btn-rename').addEventListener('click', async () => { if (!state.filter) return; const n = prompt(`New name for "${state.filter}":`, state.filter); if (!n || n.trim() === state.filter) return; const j = await tryApi('/api/admin/rename', { student: state.filter, newName: n.trim() }); if (j && j.ok) { addFilterOption(j.name); $('filter').value = j.name; } });
+
+  // ---------- requests view: full-screen live table + request / student sidebar ----------
+  const rq = { paused: false, buffer: [], search: '', student: new URLSearchParams(location.search).get('student') || '', sel: null, max: 2000 };
+  if (rq.student) $('rq-student').value = rq.student;
+  function rqMatches(tr) { return (!rq.student || tr.dataset.student.toLowerCase().includes(rq.student.toLowerCase())) && (!rq.search || tr.dataset.text.includes(rq.search)); }
+  function rqAddRow(ev) {
+    const tr = document.createElement('tr');
+    tr.className = sevClass(ev); tr.dataset.student = ev.student; tr._ev = ev;
+    tr.dataset.text = `${ev.method} ${ev.path} ${ev.objectId ?? ''} ${ev.status} ${ev.flags.join(' ')} ${(ev.attacks || []).map((a) => a.cls).join(' ')} ${ev.owner ?? ''} ${ev.student} ${ev.ip}`.toLowerCase();
+    tr.innerHTML = `<td>${fmtTime(ev.ts)}</td><td>${esc(ev.student)}</td><td>${esc(ev.ip)}</td><td>${esc(ev.method)}</td><td title="${esc(ev.path)}">${esc(ev.path)}</td><td>${esc(ev.objectId ?? '')}</td><td>${statusBadge(ev.status)}</td><td>${ev.size}</td><td>${ev.latencyMs}</td><td>${flagsHtml(ev)}</td>`;
+    if (!rqMatches(tr)) tr.classList.add('hidden');
+    const tb = $('rq-rows'); tb.prepend(tr); while (tb.children.length > rq.max) tb.lastChild.remove();
+    if (state.view === 'requests') rqCount();
+  }
+  function rqCount() { const all = $('rq-rows').children.length, vis = [...$('rq-rows').children].filter((t) => !t.classList.contains('hidden')).length; $('rq-count').textContent = rq.search || rq.student ? `${vis} of ${all}` : `${all} rows`; }
+  function rqApplyFilter() { for (const tr of $('rq-rows').children) tr.classList.toggle('hidden', !rqMatches(tr)); rqCount(); }
+  $('rq-search').addEventListener('input', (e) => { rq.search = e.target.value.trim().toLowerCase(); rqApplyFilter(); });
+  $('rq-student').addEventListener('input', (e) => { rq.student = e.target.value.trim(); rqApplyFilter(); history.replaceState(null, '', rq.student ? `/requests?student=${encodeURIComponent(rq.student)}` : '/requests'); });
+  $('rq-clear').addEventListener('click', () => { $('rq-rows').innerHTML = ''; rqCount(); });
+  $('rq-pause').addEventListener('click', () => { rq.paused = !rq.paused; const b = $('rq-pause'); b.classList.toggle('paused', rq.paused); b.textContent = rq.paused ? '▶ Resume' : '⏸ Pause'; if (!rq.paused) for (const ev of rq.buffer.splice(0)) rqAddRow(ev); });
+  function rqFeed(ev) { if (rq.paused) { rq.buffer.push(ev); if (rq.buffer.length > 5000) rq.buffer.shift(); } else rqAddRow(ev); }
+  $('rq-rows').addEventListener('click', (e) => { const tr = e.target.closest('tr'); if (!tr || !tr._ev) return; for (const t of $('rq-rows').children) t.classList.remove('sel'); tr.classList.add('sel'); rq.sel = tr._ev; rqRenderSide(); });
+  function requestDetailHtml(ev) {
+    const kv = [['time', fmtDate(ev.ts)], ['student', ev.student], ['identified by', ev.source + (ev.rawName && ev.rawName !== ev.student ? ` (raw: ${ev.rawName})` : '')], ['ip', ev.ip], ['method', ev.method], ['path', ev.path, 'path'],
+      ['endpoint', ev.endpoint ? `${ev.endpoint} · id ${ev.objectId ?? '–'}` : '–'], ['owner', ev.owner ? `${ev.owner}${ev.ownerBasis ? ` (${ev.ownerBasis})` : ''}${ev.mine === false ? ' · NOT theirs' : ev.mine === true ? ' · theirs' : ''}` : '–'],
+      ['status', `${ev.status}`], ['response', `${ev.size} bytes · ${ev.latencyMs} ms`], ['severity', ev.severity], ['flags', (ev.flags || []).filter((f) => !f.startsWith('attack:')).join(', ') || '–'], ['user agent', ev.ua || '–']];
+    if (ev.seq && ev.seq.length) kv.push(['id sequence', ev.seq.join(' → ')]);
+    if (ev.error) kv.push(['error', ev.error]);
+    return `<h3>Request <span>#${ev.n || ''}</span></h3><div class="kv">${kv.map(([k, v, cls]) => `<span class="k">${esc(k)}</span><span class="v ${cls || ''}">${esc(v)}</span>`).join('')}</div>` +
+      ((ev.attacks || []).length ? `<h4 style="margin:10px 0 4px;font-size:11px;color:var(--high)">🧨 Attack payloads</h4><div class="kv">${ev.attacks.map((a) => `<span class="k"><span class="flag attack">${esc(a.cls)}</span></span><span class="v">${esc(a.label)} in ${esc(a.where)}:<br><span style="color:var(--notice)">${esc(a.sample)}</span></span>`).join('')}</div>` : '') +
+      (ev.body ? `<h4 style="margin:10px 0 4px;font-size:11px;color:var(--faint)">Request body (secrets masked)</h4><pre class="body">${esc(JSON.stringify(ev.body, null, 1))}</pre>` : '');
+  }
+  function rqRenderSide() {
+    const ev = rq.sel; if (!ev) return;
+    $('rq-req').innerHTML = requestDetailHtml(ev);
+    const s = state.stats && state.stats.students.find((x) => x.name === ev.student);
+    const card = $('rq-card'); card.classList.toggle('hidden', !s); if (!s) return;
+    const isAdmin = state.me && state.me.role === 'admin';
+    card.innerHTML = `<h3>Student</h3><div class="sc-name"><span class="av" style="background:${colorFor(s.name)}"></span><b>${esc(s.name)}</b> ${s.blocked ? '<span class="badge" style="color:var(--critical);border-color:var(--critical)">BLOCKED</span>' : ''}</div>
+      <div id="student-actions" style="display:flex"><button class="small" data-act="details">📄 Details ↗</button>${isAdmin ? `<button class="small ${s.blocked ? '' : 'danger'}" data-act="block">${s.blocked ? '✅ Unblock' : '⛔ Block'}</button>${s.renamePending ? '' : '<button class="small" data-act="ask">🔁 Ask to rename</button>'}<button class="small" data-act="rename">✎ Rename</button>` : ''}<button class="small" data-act="live">📡 Show in Live</button></div>
+      <div class="grid2">${cardGridHtml(s)}</div>
+      <h4 style="margin:10px 0 4px;font-size:11px;color:var(--faint)">IP addresses</h4><ul class="list">${cardIpsHtml(s)}</ul>
+      <h4 style="margin:10px 0 4px;font-size:11px;color:var(--faint)">User agents</h4><ul class="list">${cardUasHtml(s)}</ul>
+      ${cardAttacksHtml(s) ? `<h4 style="margin:10px 0 4px;font-size:11px;color:var(--high)">🧨 Attack classes</h4><ul class="list">${cardAttacksHtml(s)}</ul>` : ''}`;
+  }
+  $('rq-card').addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-act]'); if (!b || !rq.sel) return;
+    const name = rq.sel.student, s = state.stats.students.find((x) => x.name === name);
+    if (b.dataset.act === 'details') return window.open('/students/' + encodeURIComponent(name), '_blank');
+    if (b.dataset.act === 'live') { selectStudent(name); return showView('live', true); }
+    if (b.dataset.act === 'block') { if (s && s.blocked) await tryApi('/api/admin/unblock', { student: name }); else if (confirm(`Block "${name}"?`)) await tryApi('/api/admin/block', { student: name }); }
+    if (b.dataset.act === 'ask' && confirm(`Ask "${name}" to enter a different name?`)) await tryApi('/api/admin/require-rename', { student: name });
+    if (b.dataset.act === 'rename') { const n = prompt(`New name for "${name}":`, name); if (n && n.trim() !== name) await tryApi('/api/admin/rename', { student: name, newName: n.trim() }); }
+    setTimeout(rqRenderSide, 1200);
+  });
 
   // ---------- tooltip ----------
   const tip = $('tip');
@@ -849,7 +940,7 @@
 
   // ---------- websocket ----------
   function handleMessage(m, live) {
-    if (m.type === 'event') { addDot(m.event, live); addRow(m.event); }
+    if (m.type === 'event') { addDot(m.event, live); addRow(m.event); rqFeed(m.event); }
     else if (m.type === 'alert') { addFeedAlert(m.alert, live); state.alerts.unshift(m.alert); if (state.view === 'alerts') { renderLevelChips(); renderAlertsTable(); } }
     else if (m.type === 'stats') {
       renderStats(m.stats); renderReplay(m.replay);
@@ -862,8 +953,8 @@
   function loadSnapshot(s) {
     if (state.serverStart && s.stats.startedAt && s.stats.startedAt !== state.serverStart) { location.reload(); return; }
     state.serverStart = s.stats.startedAt;
-    $('lanes').querySelectorAll('.lane').forEach((e) => e.remove()); state.lanes.clear(); laneCounts.clear(); $('rows').innerHTML = ''; $('alerts').innerHTML = '';
-    for (const ev of s.events) { addDot(ev, false); addRow(ev); }
+    $('lanes').querySelectorAll('.lane').forEach((e) => e.remove()); state.lanes.clear(); laneCounts.clear(); $('rows').innerHTML = ''; $('alerts').innerHTML = ''; $('rq-rows').innerHTML = '';
+    for (const ev of s.events) { addDot(ev, false); addRow(ev); rqAddRow(ev); }
     for (const a of s.alerts) addFeedAlert(a, false);
     for (const st of s.stats.students) { lane(st.name, st.source); addFilterOption(st.name); }
     renderStats(s.stats); setStudentQuery($('filter').value);
