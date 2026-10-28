@@ -279,7 +279,8 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
       if (cfg) gate.getConfig = () => cfg;
       const html = gate.page('/', qs.get('error') || '');
       gate.getConfig = saved;
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...SECURITY_HEADERS, 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'" });
+      // this page is shown inside the Gate tab's iframe: allow framing by the dashboard itself only
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...SECURITY_HEADERS, 'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; frame-ancestors 'self'" });
       return res.end(html.replace('<form method="post"', '<form onsubmit="return false" method="post"'));
     }
 
