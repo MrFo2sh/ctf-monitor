@@ -1,3 +1,5 @@
+> **Added after this chapter was written:** `test/golden.test.js` replays 230 recorded proxy exchanges (`test/fixtures/golden-raw.jsonl`) through `src/pipeline.js` and compares every event's flags, severity, owner, identity and masked path with `golden-expected.json`. It is the regression net for any change to identity, detection, attacks, masking or alerting. See [28-pipeline.md](28-pipeline.md) for how to re-record it.
+
 # Tests — `proxy/test/*.test.js`, `proxy/package.json`
 
 ## Purpose

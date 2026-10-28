@@ -223,10 +223,13 @@ class Db {
   }
   importCtf(data) {
     if (!data || data.format !== 'ctf-watch/1' || !data.ctf || !Array.isArray(data.requests)) throw new Error('not a ctf-watch export');
-    const r = this.db.prepare('INSERT INTO ctfs (name, started_at, ended_at, imported) VALUES (?, ?, ?, 1)').run(`${data.ctf.name} (imported)`, data.ctf.started_at || Date.now(), data.ctf.ended_at || Date.now());
-    const id = Number(r.lastInsertRowid);
+    this.flush();
+    let id;
     this.db.exec('BEGIN');
     try {
+      // the ctf row is part of the transaction: a failed import leaves nothing behind
+      const r = this.db.prepare('INSERT INTO ctfs (name, started_at, ended_at, imported) VALUES (?, ?, ?, 1)').run(`${data.ctf.name} (imported)`, data.ctf.started_at || Date.now(), data.ctf.ended_at || Date.now());
+      id = Number(r.lastInsertRowid);
       for (const e of data.requests) {
         this.stmts.insertReq.run(id, e.ts, null, e.student, e.raw_name || e.rawName || null, e.source || null, e.ip || null, e.method, e.path, e.endpoint || null,
           e.object_id == null ? (e.objectId == null ? null : String(e.objectId)) : String(e.object_id), e.status, e.size, e.latency ?? e.latencyMs ?? 0, e.severity,

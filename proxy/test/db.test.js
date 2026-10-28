@@ -81,3 +81,13 @@ test('export / import round trip creates an imported CTF with the same requests'
   assert.equal(db.listCtfs().length, 2);
   assert.throws(() => db.importCtf({ nope: true }), /not a ctf-watch export/);
 });
+
+test('a failed import leaves no half-imported CTF behind (issue 4)', () => {
+  const db = new Db(':memory:');
+  db.openCtf('live');
+  const before = db.listCtfs().length;
+  // a request row that cannot be inserted (status must be a number for the NOT NULL/typed insert to fail) -> use a poison value
+  const bad = { format: 'ctf-watch/1', ctf: { name: 'broken' }, requests: [{ ts: 1, student: 'a', method: 'GET', path: '/', status: 200, size: 1, latency: 0, severity: 'ok' }, null], alerts: [] };
+  assert.throws(() => db.importCtf(bad));
+  assert.equal(db.listCtfs().length, before, 'no "(imported)" record must remain');
+});
