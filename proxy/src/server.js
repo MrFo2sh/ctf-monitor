@@ -15,12 +15,11 @@ const { Approvals } = require('./approvals');
 const { Decoy } = require('./decoy');
 const { Replay } = require('./replay');
 const { Playground } = require('./playground');
-const { classify, worstLevel } = require('./attacks');
+const { buildEvent, withAlias: aliasWith, rawToJson } = require('./pipeline');
 const { createProxy } = require('./proxy');
 const { discover, validateTarget } = require('./ports');
 const { createDashboard } = require('./dashboard');
-const { maskObject, maskUrl, maskText } = require('./mask');
-const { parseBody, clientIp, macFor, log } = require('./util');
+const { clientIp, macFor, log } = require('./util');
 
 const env = (k, d) => (process.env[k] === undefined || process.env[k] === '' ? d : process.env[k]);
 const flag = (k) => /^(1|true|yes)$/i.test(String(env(k, '')));
@@ -122,10 +121,7 @@ function printCredentials(list) {
 }
 
 // ---------------------------------------------------------------- helpers
-const withAlias = (who) => {
-  const name = admin.alias(who.name);
-  return name === who.name ? who : { ...who, name, rawName: who.name };
-};
+const withAlias = (who) => aliasWith(who, (n) => admin.alias(n));
 
 function mergeLane(anonLabel, rawName) {
   const target = admin.alias(rawName);
@@ -183,51 +179,13 @@ function preRequest(req, res) {
   return true;
 }
 
+// RECORD_RAW=<file>: append every raw exchange as JSON lines (used to build the golden-test fixture)
+const rawRecorder = process.env.RECORD_RAW ? fs.createWriteStream(process.env.RECORD_RAW, { flags: 'a' }) : null;
+
+const pipelineDeps = { getConfig, identity, detector, alias: (n) => admin.alias(n), profiles, playerIdFor, isDecoy: (n) => decoy.has(n) };
 function onEvent(x) {
-  const cfg = getConfig();
-  const blockedReq = x.error === 'blocked';
-  const reqBody = parseBody(x.req.headers['content-type'], x.reqBuf);
-  const resBody = parseBody(x.resHeaders['content-type'], x.resBuf);
-  const ip = clientIp(x.req);
-
-  const pre = identity.resolve(x.req);
-  const learned = blockedReq ? null : identity.learn({ req: x.req, identity: pre, reqBody, status: x.status, resHeaders: x.resHeaders, resBody, pathOnly: x.pathOnly });
-  let who = identity.resolve(x.req);
-  if (learned && (who.source === 'ip' || who.name.startsWith('sess-'))) who = { ...who, name: learned.name, id: learned.id || who.id, source: 'login' };
-  if (learned && (who.source === 'name' || who.source === 'ip-match')) who = { ...who, id: who.id || learned.id || null, appName: who.appName || learned.name };
-  who = withAlias(who);
-
-  let hasData = x.size >= cfg.successMinBytes;
-  if (hasData && resBody && typeof resBody === 'object' && !Array.isArray(resBody)) {
-    const keys = Object.keys(resBody);
-    if (keys.length && keys.every((k) => /^(error|err|message|msg|success|status)$/i.test(k))) hasData = false;
-  }
-
-  const verdict = blockedReq
-    ? { endpoint: null, objectId: null, owner: null, ownerBasis: null, mine: null, seq: null, sequential: false, distinctIds: 0, flags: ['blocked'], severity: 'notice' }
-    : detector.analyze({ student: who, method: x.method, pathOnly: x.pathOnly, url: x.url, status: x.status, size: x.size, hasData, reqBody, ts: x.ts });
-
-  // web exploitation attempts (SQLi, XSS, SSTI, LFI, shells, scanners...)
-  const attacks = blockedReq ? [] : classify({ url: x.url, bodyText: x.reqBuf.length ? x.reqBuf.toString('utf8', 0, 8192) : '', ua: x.req.headers['user-agent'], referer: x.req.headers.referer });
-  const flags = verdict.flags.concat(attacks.map((a) => `attack:${a.cls}`));
-  let severity = verdict.severity;
-  if (attacks.length && severity !== 'critical') {
-    const w = worstLevel(attacks);
-    if (w === 'critical') severity = 'critical';
-    else if (w === 'high' && severity !== 'high') severity = 'high';
-    else if (severity === 'ok' || severity === 'notice') severity = 'warn';
-  }
-
-  const ev = {
-    ts: x.ts, time: new Date(x.ts).toISOString(), student: who.name, rawName: who.rawName || who.name, studentId: who.id, source: who.source,
-    appName: who.appName || undefined, profile: profiles[who.rawName || who.name] || undefined, playerId: playerIdFor(who, ip, x.ts), ip, method: x.method, path: maskText(maskUrl(x.url, cfg.maskFields)),
-    endpoint: verdict.endpoint, objectId: verdict.objectId, status: x.status, size: x.size, latencyMs: x.latencyMs, flags: decoy.has(who.name) ? flags.concat('decoy') : flags, attacks, severity,
-    decoy: decoy.has(who.name) || undefined,
-    owner: verdict.owner, ownerBasis: verdict.ownerBasis, mine: verdict.mine, seq: verdict.seq, sequential: verdict.sequential, distinctIds: verdict.distinctIds,
-    idsSeenTotal: verdict.idsSeenTotal, ua: String(x.req.headers['user-agent'] || '').slice(0, 160),
-    body: x.method !== 'GET' && reqBody ? maskObject(reqBody, cfg.maskFields) : undefined, error: x.error || undefined,
-  };
-  store.add(ev);
+  if (rawRecorder) rawRecorder.write(JSON.stringify(rawToJson(x)) + '\n');
+  store.add(buildEvent(x, pipelineDeps));
 }
 
 const shouldIgnore = (pathOnly) => getConfig().compiledIgnore.some((re) => re.test(pathOnly));

@@ -51,6 +51,7 @@ Budget about one hour per chapter; the long ones (`namegate`, `store`, `db`, `da
 | 25 | [mock](25-mock.md) | `proxy/mock/*` | the fake CTF, the simulator personas, the load test |
 | 26 | [tests](26-tests.md) | `proxy/test/*` | what is covered and how to add a test |
 | 27 | [reference cards](27-reference.md) | | environment variables, persisted state, WebSocket messages, commands |
+| 28 | [pipeline](28-pipeline.md) | `proxy/src/pipeline.js` | the event pipeline as a module, the raw recorder, the golden test |
 
 ---
 
