@@ -51,11 +51,11 @@ Items are ordered by how much they matter during a real event.
 - **What**: the 120-character sample around a match was taken from the decoded request; a payload inside a password field would have appeared unmasked in alerts and detail pages.
 - **Fix applied**: the body is passed through the new `maskBodyText()` (values of sensitive fields replaced by `***`, structure kept, JSON and form bodies), the URL through `maskUrl()`, and every sample through `maskText()`. The golden replay shows no change in classification. Test: `core.test.js` "maskBodyText hides secret values…".
 
-## 9. Secrets in `logs/credentials.txt` and in the container log
+## 9. Secrets in `logs/credentials.txt` and in the container log — ADDRESSED
 
 - **Where**: `proxy/src/server.js` `printCredentials()`.
 - **What**: plaintext dashboard passwords are written to a file (mode 600) and to stdout, which Docker keeps in its log for the container's lifetime.
-- **Fix**: print once to stdout and skip the file by default (`CREDENTIALS_FILE=0`), or rotate the Docker log; document `docker logs` exposure.
+- **Applied**: `CREDENTIALS_FILE=0` disables the file (and removes a stale one); the default stays `1` because `start.sh` and non-technical operators rely on it. The `docker logs` exposure is documented in `.env.example` and the operator course; it ends when the container is recreated (`./start.sh` does that on every run). Not changed: stdout printing, which `start.sh` needs.
 
 ## 10. No HTTPS on the dashboard
 

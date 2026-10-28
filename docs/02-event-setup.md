@@ -38,5 +38,8 @@ Do this the day before, not the morning of.
 - Do not share the dashboard address through zrok or any tunnel other than SSH. It holds the
   students' data and the controls.
 - Do not run the Playground's fake students against the real challenge during the event.
+- Know where the passwords live: `logs/credentials.txt` on the VM (readable by your user only,
+  switch it off with `CREDENTIALS_FILE=0` in `.env`) and the container's own log until the next
+  start. Anyone with a shell on the VM can read both; keep the VM to yourself.
 - Do not restart the monitor casually during the event: accounts are regenerated and everyone is
   logged out. Data is kept, the link is kept, but logins change.

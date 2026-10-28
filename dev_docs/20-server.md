@@ -492,3 +492,7 @@ Tests: **`server.js` has no unit test and cannot be required without side effect
 | `studentLink` | `() → { url, source, since } \| { url: null, source: null, hint }` | Public zrok link. |
 | `resetLive` / `newCtf` / `stopCtf` | `() → void` / `(name?) → ctf` / `() → ctf \| null` | CTF lifecycle. |
 | `shutdown` | `() → never` | Stop children, close db, exit 0. |
+
+## Update: issue 9 addressed
+
+`printCredentials()` still prints the generated accounts to stdout (what `start.sh` reads), but writing `logs/credentials.txt` is now controlled by `CREDENTIALS_FILE` (default `1`); with `0` the file is not written and a stale one from an earlier start is removed. The container log exposure remains by design and is documented for operators.

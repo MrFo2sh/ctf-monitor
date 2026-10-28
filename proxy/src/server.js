@@ -116,14 +116,24 @@ const auth = new Auth(db, {
 const credentials = auth.generateAccounts(DASHBOARD_USERS);
 printCredentials(credentials);
 
+// Printed once to stdout (start.sh shows it); also written to logs/credentials.txt (mode 600) unless
+// CREDENTIALS_FILE=0. Note that Docker keeps stdout in the container log: `docker logs` shows them too.
 function printCredentials(list) {
   const lines = ['', '==================== DASHBOARD LOGIN ====================', ...list.map((c) => `  ${c.role.padEnd(5)}  ${c.username.padEnd(12)}  password: ${c.password}`), '=========================================================', ''];
   console.log(lines.join('\n'));
-  try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-    fs.writeFileSync(path.join(LOG_DIR, 'credentials.txt'), lines.join('\n'), { mode: 0o600 });
-  } catch (err) {
-    log('error', `could not write credentials file: ${err.message}`);
+  const file = path.join(LOG_DIR, 'credentials.txt');
+  if (!/^(0|false|no)$/i.test(String(env('CREDENTIALS_FILE', '1')))) {
+    try {
+      fs.mkdirSync(LOG_DIR, { recursive: true });
+      fs.writeFileSync(file, lines.join('\n'), { mode: 0o600 });
+    } catch (err) {
+      log('error', `could not write credentials file: ${err.message}`);
+    }
+  } else {
+    try {
+      fs.unlinkSync(file); // a file from an earlier start must not outlive this setting
+    } catch {}
+    log('info', 'credentials file disabled (CREDENTIALS_FILE=0): accounts shown on stdout only');
   }
 }
 
