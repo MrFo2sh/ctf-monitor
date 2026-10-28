@@ -1,0 +1,14 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.1.2/schema.json",
+  "files": { "includes": ["src/**", "test/**", "mock/**"] },
+  "formatter": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noAssignInExpressions": "off"
+      }
+    }
+  }
+}

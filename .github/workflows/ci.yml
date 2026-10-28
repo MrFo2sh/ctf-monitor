@@ -1,0 +1,18 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: proxy/package-lock.json
+      - run: npm --prefix proxy ci --no-audit --no-fund
+      - run: npm --prefix proxy run lint
+      - run: npm --prefix proxy run typecheck
+      - run: npm --prefix proxy test
+      - run: docker build -t ctf-watch-monitor:ci ./proxy
+      - run: npm --prefix proxy audit --audit-level=high

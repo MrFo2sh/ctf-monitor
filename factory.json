@@ -1,0 +1,18 @@
+{
+  "name": "ctf-watch",
+  "one_liner": "Live SOC dashboard for web CTFs: a logging reverse proxy that shows who is doing what, per student, as it happens.",
+  "blueprint": "api-service (adopted: vanilla Node 24, no framework)",
+  "version": "1.0.0",
+  "check": ["lint", "typecheck", "test", "build", "audit"],
+  "stopOnFail": true,
+  "commands": {
+    "install": "npm --prefix proxy ci --no-audit --no-fund",
+    "lint": "npm --prefix proxy run lint",
+    "typecheck": "npm --prefix proxy run typecheck",
+    "test": "npm --prefix proxy test",
+    "build": "docker build -t ctf-watch-monitor:latest ./proxy",
+    "audit": "npm --prefix proxy audit --audit-level=high",
+    "run": "docker compose up --build",
+    "release": "docker build -t ctf-watch-monitor:latest -t ctf-watch-monitor:1.0.0 ./proxy"
+  }
+}

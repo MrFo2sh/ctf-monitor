@@ -8,10 +8,19 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test --test-reporter=spec \"test/**/*.test.js\""
+    "test": "node --test --test-reporter=spec \"test/**/*.test.js\"",
+    "lint": "biome lint src test mock",
+    "typecheck": "tsc -p jsconfig.json"
   },
-  "engines": { "node": ">=23.4" },
+  "engines": {
+    "node": ">=23.4"
+  },
   "dependencies": {
-    "ws": "8.18.0"
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.1.2",
+    "@types/node": "^24.19.2",
+    "typescript": "^5.9.2"
   }
 }

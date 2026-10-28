@@ -18,3 +18,5 @@ npm-debug.log*
 .idea/
 # TLS files for the dashboard (keep them out of git)
 certs/
+# factory check logs
+.factory/
