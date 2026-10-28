@@ -12,6 +12,7 @@
 | `DASHBOARD_USERS` | `3` | number of `user_N` viewer accounts generated at boot |
 | `SESSION_TTL_HOURS` | `12` | idle lifetime of a dashboard session |
 | `CREDENTIALS_FILE` | `1` | `0` = do not write `logs/credentials.txt` (accounts on stdout only) |
+| `TLS_CERT` / `TLS_KEY` | empty | PEM files (mount `./certs` → `/app/certs`) to serve the dashboard over https with Secure cookies |
 | `LOG_LEVEL` | `info` | `debug` prints identity/ownership learning |
 | `NAME_GATE_COOKIE` / `NAME_GATE_TITLE` | `ctfw_name` / `Welcome to the CTF` | cookie name; default title (the Gate tab overrides it) |
 | `CONFIG_DIR`, `LOG_DIR`, `DATA_DIR`, `DB_FILE` | `/app/config`, `/app/logs`, `/app/data`, `<DATA_DIR>/ctf-watch.db` | paths inside the container |

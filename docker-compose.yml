@@ -23,6 +23,9 @@ services:
       DASHBOARD_USERS: ${DASHBOARD_USERS:-3}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       CREDENTIALS_FILE: ${CREDENTIALS_FILE:-1}
+      # https for the dashboard: put cert.pem + key.pem in ./certs and set these to /app/certs/cert.pem, /app/certs/key.pem
+      TLS_CERT: ${TLS_CERT:-}
+      TLS_KEY: ${TLS_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CONFIG_DIR: /app/config
       LOG_DIR: /app/logs
@@ -31,6 +34,7 @@ services:
       - ./config:/app/config:ro
       - ./logs:/app/logs
       - ./data:/app/data
+      - ./certs:/app/certs:ro
       # read-only, so the CTFs tab can list the other containers and their ports
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped

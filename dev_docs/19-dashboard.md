@@ -346,3 +346,7 @@ Legend for "who": **any** = any logged-in account; **admin** = `adminOnly()`; **
 | * | anything else | any | — | `404 { error: 'not found' }` |
 
 Exported function: `createDashboard(opts) → http.Server`.
+
+## Update: issue 10 fixed (https)
+
+`createDashboard` takes `tls: { cert, key }` (PEM paths from `TLS_CERT` / `TLS_KEY`). When both files load, the server is `https.createServer` and the login cookie is issued with `Secure`; otherwise plain http as before, with an error logged if the files were set but unreadable. The WebSocket client already picks `wss` on an https page.

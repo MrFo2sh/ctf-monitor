@@ -301,7 +301,7 @@ function stopCtf() {
 }
 
 createProxy({ getTarget, getTargetFor, bind: PROXY_BIND, port: PROXY_PORT, shouldIgnore, onEvent, gate, preRequest });
-createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, decoy, decoySet, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw });
+createDashboard({ port: DASHBOARD_PORT, bind: DASHBOARD_BIND, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, decoy, decoySet, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort: PROXY_PORT, getRawConfig: () => config.raw, tls: { cert: env('TLS_CERT', ''), key: env('TLS_KEY', '') } });
 
 log('info', `ctf-watch v2.1 started (gate ${gateConfig.enabled ? 'on' : 'off'}, fields: ${gateConfig.fields.map((f) => f.key).join(', ')}; trusted proxies: ${TRUSTED.trustAll ? 'ALL (headers always believed)' : TRUSTED.trusted.join(', ')}). ctf="${ctf.name}" target=${target || '(pick one in the dashboard, CTFs tab)'} proxy=${PROXY_BIND}:${PROXY_PORT} dashboard=${DASHBOARD_BIND}:${DASHBOARD_PORT} db=${DB_FILE}`);
 

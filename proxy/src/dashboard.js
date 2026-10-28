@@ -2,6 +2,7 @@
 // Dashboard server: login, pages, JSON API, authenticated WebSocket feed, organizer actions, query, export/import/replay.
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
@@ -43,8 +44,18 @@ const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-function createDashboard({ port, bind, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, decoy, decoySet, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig }) {
+function createDashboard({ port, bind, store, admin, auth, db, replay, playground, gate, setGateConfig, approvals, queueDecide, decoy, decoySet, newCtf, stopCtf, getTarget, setTarget, discoverTargets, studentLink, proxyPort, getRawConfig, tls }) {
   bind = bind || '127.0.0.1';
+  // TLS_CERT + TLS_KEY (PEM files) switch the dashboard to https; the session cookie then carries Secure
+  let tlsOptions = null;
+  if (tls && tls.cert && tls.key) {
+    try {
+      tlsOptions = { cert: fs.readFileSync(tls.cert), key: fs.readFileSync(tls.key) };
+    } catch (err) {
+      log('error', `TLS files could not be read (${err.message}); the dashboard stays on plain http`);
+    }
+  }
+  const secureCookies = () => !!tlsOptions;
   // while the live view shows a replayed CTF, history views (alerts, student detail, query) read that CTF
   const scopeCtf = (explicit) => (explicit ? Number(explicit) : store.replayCtfId || db.ctfId || undefined);
   const json = (res, status, obj) => {
@@ -91,7 +102,7 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
       }
       const r = auth.login(body.username, body.password, ip);
       if (!r.ok) return json(res, r.status, { error: r.error });
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': auth.cookieFor(r.token, req.headers['x-forwarded-proto'] === 'https'), ...SECURITY_HEADERS });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': auth.cookieFor(r.token, secureCookies() || req.headers['x-forwarded-proto'] === 'https'), ...SECURITY_HEADERS });
       return res.end(JSON.stringify({ ok: true, account: r.account }));
     }
 
@@ -376,12 +387,13 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
     json(res, 404, { error: 'not found' });
   }
 
-  const server = http.createServer((req, res) => {
+  const onRequest = (req, res) => {
     handle(req, res).catch((err) => {
       log('error', `dashboard: ${err.stack || err}`);
       if (!res.headersSent) json(res, 500, { error: 'internal error' });
     });
-  });
+  };
+  const server = tlsOptions ? https.createServer(tlsOptions, onRequest) : http.createServer(onRequest);
 
   // ---- websocket (session checked on upgrade)
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
@@ -417,7 +429,7 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
   const statsTimer = setInterval(() => wss.clients.size && broadcast({ type: 'stats', stats: store.stats(), replay: replay.status(), target: getTarget(), mock: { app: playground.mock.running(), sim: playground.sim.running() }, gate: gate.enabled, queue: gate.config.queue ? approvals.counts() : null }), 1000);
   statsTimer.unref();
 
-  server.listen(port, bind, () => log('info', `dashboard on http://${bind}:${port}${bind === '127.0.0.1' ? '  (local only)' : ''}`));
+  server.listen(port, bind, () => log('info', `dashboard on ${tlsOptions ? 'https' : 'http'}://${bind}:${port}${bind === '127.0.0.1' ? '  (local only)' : ''}`));
   return server;
 }
 

@@ -9,11 +9,11 @@ Items are ordered by how much they matter during a real event.
 - **What**: the first value of `X-Forwarded-For` (then `X-Real-IP`) was taken as the client's address from any peer. A student who could reach the proxy port directly could send `X-Forwarded-For: 1.2.3.4` and appear as another IP.
 - **Fix applied**: `TRUSTED_PROXIES` (default `127.0.0.1,::1,::ffff:127.0.0.1`, the tunnel on the VM; `*` trusts everyone). `clientIp` believes the headers only when the socket peer is in the list, otherwise the socket address is the identity. When forwarding, a trusted peer's chain is appended to, an untrusted client's `X-Forwarded-For` / `X-Real-IP` are dropped and replaced by its real address (HTTP and WebSocket paths). The Docker Desktop rehearsal override sets `*` because the Playground's fake students fake their addresses on purpose. Test: `core.test.js` "clientIp believes forwarded headers only from trusted proxies". Golden replay unchanged (its peer is `127.0.0.1`).
 
-## 2. Shared IPs can merge two people into one player record
+## 2. Shared IPs can merge two people into one player record — FIXED
 
-- **Where**: `proxy/src/db.js` `playerFor()` / `upsertIdentity`; `proxy/src/server.js` `playerIdFor()`.
-- **What**: an `ip` identity is looked up like a name or email. Two students behind one NAT (classroom Wi-Fi) can resolve to the same player, and an identity is never moved once attached to a player.
-- **Fix**: give identity kinds a weight (gate id/email > app username > name > ip) and only create or attach by ip when no stronger identity is present; never *match* on ip alone when the name differs.
+- **Where**: `proxy/src/db.js` `playerFor()`.
+- **What**: an `ip` identity was looked up like a name or email. Two students behind one NAT (classroom Wi-Fi) resolved to the same player.
+- **Fix applied**: an ip is never used to match an existing player when any stronger identity (gate name, gate id/email, app username, MAC) is present; it is still recorded for the history and stays with its first owner. Only an identity list made of nothing but an ip may match by ip. Tests: `db.test.js` "a shared ip never merges two different people" and the updated cross-CTF test. Operator docs updated (recognition is by name, id, email, app username or MAC; the ip is shown, not trusted).
 
 ## 3. A failed database flush loses the batch — FIXED
 
@@ -57,11 +57,11 @@ Items are ordered by how much they matter during a real event.
 - **What**: plaintext dashboard passwords are written to a file (mode 600) and to stdout, which Docker keeps in its log for the container's lifetime.
 - **Applied**: `CREDENTIALS_FILE=0` disables the file (and removes a stale one); the default stays `1` because `start.sh` and non-technical operators rely on it. The `docker logs` exposure is documented in `.env.example` and the operator course; it ends when the container is recreated (`./start.sh` does that on every run). Not changed: stdout printing, which `start.sh` needs.
 
-## 10. No HTTPS on the dashboard
+## 10. No HTTPS on the dashboard — FIXED
 
 - **Where**: `proxy/src/dashboard.js`.
-- **What**: the session cookie travels in clear text. Safe over the SSH tunnel or loopback; not safe with `DASHBOARD_BIND=0.0.0.0` on a shared network.
-- **Fix**: support a TLS cert pair via environment variables, or document a reverse proxy in front.
+- **What**: the session cookie travelled in clear text. Safe over the SSH tunnel or loopback; not safe with `DASHBOARD_BIND=0.0.0.0` on a shared network.
+- **Fix applied**: `TLS_CERT` + `TLS_KEY` (PEM paths; `./certs` is mounted at `/app/certs`) switch the dashboard to https and the session cookie to `Secure`; the WebSocket follows automatically (`wss`). Unreadable files fall back to http with an error in the log. `.env.example` shows the one-line self-signed certificate command.
 
 ## Smaller notes
 
