@@ -138,7 +138,16 @@ two minutes), the selected student's card with IP addresses and actions, the ale
 stats (req/s, status codes, top endpoints, attack classes) and the leaderboard. The selected
 student's card also lists every user agent they used with counts and, when there are any, the
 attack classes seen from them with counts. The bottom panel
-is the request log with its own search; ⤢ makes it taller, ↗ opens it in a new tab.
+is the request log with its own search; ⤢ makes it taller, ↗ opens the **Requests** tab in a new
+window.
+
+### Requests
+
+The full live request log on the whole screen (the last 2000 requests, with search, a student
+filter, pause and clear). Click a request: the right column shows everything about it (student,
+IP, method, full path, endpoint and object id, owner, status, size, latency, flags, the attack
+payloads found and where, the user agent, the masked request body) and the student's card with
+the same actions as on the Live tab.
 
 ### Alerts
 

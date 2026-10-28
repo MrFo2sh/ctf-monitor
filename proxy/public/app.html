@@ -699,7 +699,7 @@
     const card = $('rq-card'); card.classList.toggle('hidden', !s); if (!s) return;
     const isAdmin = state.me && state.me.role === 'admin';
     card.innerHTML = `<h3>Student</h3><div class="sc-name"><span class="av" style="background:${colorFor(s.name)}"></span><b>${esc(s.name)}</b> ${s.blocked ? '<span class="badge" style="color:var(--critical);border-color:var(--critical)">BLOCKED</span>' : ''}</div>
-      <div id="student-actions" style="display:flex"><button class="small" data-act="details">📄 Details ↗</button>${isAdmin ? `<button class="small ${s.blocked ? '' : 'danger'}" data-act="block">${s.blocked ? '✅ Unblock' : '⛔ Block'}</button>${s.renamePending ? '' : '<button class="small" data-act="ask">🔁 Ask to rename</button>'}<button class="small" data-act="rename">✎ Rename</button>` : ''}<button class="small" data-act="live">📡 Show in Live</button></div>
+      <div class="rq-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px"><button class="small" data-act="details">📄 Details ↗</button>${isAdmin ? `<button class="small ${s.blocked ? '' : 'danger'}" data-act="block">${s.blocked ? '✅ Unblock' : '⛔ Block'}</button>${s.renamePending ? '' : '<button class="small" data-act="ask">🔁 Ask to rename</button>'}<button class="small" data-act="rename">✎ Rename</button>` : ''}<button class="small" data-act="live">📡 Show in Live</button></div>
       <div class="grid2">${cardGridHtml(s)}</div>
       <h4 style="margin:10px 0 4px;font-size:11px;color:var(--faint)">IP addresses</h4><ul class="list">${cardIpsHtml(s)}</ul>
       <h4 style="margin:10px 0 4px;font-size:11px;color:var(--faint)">User agents</h4><ul class="list">${cardUasHtml(s)}</ul>
