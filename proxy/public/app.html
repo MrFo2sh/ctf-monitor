@@ -64,7 +64,20 @@
   .cols { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap:12px; align-items:start }
   .cols > * { min-width:0 }
   .empty { color:var(--faint); text-align:center; padding:50px 20px; font-size:14px } .empty code { font-family:var(--mono); color:var(--muted) }
-  textarea.q { width:100%; min-height:64px; font-family:var(--mono); font-size:13px; resize:vertical }
+  /* ---- query editor: transparent textarea over a highlighted mirror ---- */
+  .qed { position:relative; font:13px/1.5 var(--mono) }
+  .qed textarea.q, .qed .qhl { margin:0; width:100%; min-height:64px; padding:8px 10px; font:inherit; box-sizing:border-box; white-space:pre-wrap; overflow-wrap:anywhere; tab-size:4 }
+  .qed textarea.q { position:relative; background:transparent; color:transparent; caret-color:var(--text); resize:vertical; z-index:1 }
+  .qed textarea.q::placeholder { color:var(--faint) }
+  .qed .qhl { position:absolute; inset:0; pointer-events:none; color:var(--text); background:var(--panel-2); border:1px solid var(--border); border-radius:4px; overflow:hidden }
+  .qed.bad .qhl { border-color:var(--critical) }
+  .qhl .tf { color:#6da7ec } .qhl .to { color:var(--muted) } .qhl .ts { color:var(--notice) } .qhl .tn { color:#199e70 } .qhl .tk { color:var(--warn); font-weight:600 } .qhl .tp { color:var(--faint) }
+  .qhl .terr { text-decoration:underline wavy var(--critical); text-decoration-skip-ink:none; background:rgba(208,59,59,.18) }
+  .qlint { min-height:1.2em; font:11px var(--mono); margin-top:4px; color:var(--muted) } .qlint.err { color:var(--critical) } .qlint.ok { color:var(--good) }
+  .qac { position:absolute; left:0; top:100%; z-index:5; min-width:320px; max-width:100%; max-height:260px; overflow-y:auto; background:#0d1218; border:1px solid var(--border); border-radius:6px; box-shadow:0 10px 30px rgba(0,0,0,.6); font:12px var(--mono) }
+  .qac div { padding:5px 10px; display:flex; gap:10px; cursor:pointer; align-items:baseline } .qac div.on, .qac div:hover { background:rgba(57,135,229,.18) }
+  .qac b { color:var(--text); font-weight:600; white-space:nowrap } .qac span { color:var(--muted); font:11px var(--sans); overflow:hidden; text-overflow:ellipsis; white-space:nowrap } .qac em { color:var(--faint); font-style:normal; margin-left:auto; font-size:10px }
+  .qhist { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px } .qhist span { cursor:pointer; color:var(--accent); font:11px var(--mono); border:1px solid var(--border); border-radius:10px; padding:1px 8px } .qhist span:hover { border-color:var(--accent) }
   pre.sql { font-family:var(--mono); font-size:11px; color:var(--muted); background:var(--panel-2); padding:6px 8px; border-radius:4px; overflow:auto; margin:6px 0 }
   .ex { color:var(--accent); cursor:pointer; font-family:var(--mono); font-size:11px; margin-right:12px }
 
@@ -271,7 +284,12 @@
   <div class="view-head"><h2>Query</h2><div class="spacer"></div><button class="small" data-open="/query">↗</button></div>
   <div class="view-body">
     <div class="card">
-      <textarea class="q" id="q" placeholder='student = "alice" AND status >= 400'></textarea>
+      <div class="qed" id="qed">
+        <pre class="qhl" id="q-hl" aria-hidden="true"></pre>
+        <textarea class="q" id="q" placeholder='student = "alice" AND status >= 400' spellcheck="false" autocomplete="off"></textarea>
+        <div class="qac hidden" id="q-ac"></div>
+      </div>
+      <div id="q-lint" class="qlint"></div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
         <button class="primary" id="q-run">▶ Run (Ctrl+Enter)</button>
         <select id="q-limit"><option>200</option><option selected>1000</option><option>5000</option><option>20000</option></select>
@@ -290,6 +308,7 @@
         <span class="ex">(path ~ "/api/orders" OR endpoint = "orders") AND NOT student = "alice"</span>
         <span class="ex">ua ~ "curl" AND size > 500</span>
       </div>
+      <div class="qhist" id="q-hist"></div>
       <pre class="sql hidden" id="q-sql"></pre>
       <div id="q-err" style="color:var(--notice);font-family:var(--mono);font-size:12px"></div>
     </div>
@@ -438,6 +457,7 @@
 </main>
 <div id="tip"></div>
 
+<script src="/query.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -773,19 +793,138 @@
     const bb = $('sd-block'); if (bb) bb.addEventListener('click', async () => { await tryApi(l.blocked ? '/api/admin/unblock' : '/api/admin/block', { student: name }); openStudentDetail(name, false); });
   }
 
-  // ---------- query view ----------
+  // ---------- query view: editor with highlighting, linting, autocomplete, history ----------
   let lastRows = [];
+  const Q = window.CtfQuery; // parser shared with the server (/query.js)
+  const qta = $('q'), qhl = $('q-hl'), qac = $('q-ac'), qlint = $('q-lint');
+  const VALUE_HINTS = {
+    method: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'].map((v) => [v, 'method']),
+    status: [['200', 'ok'], ['201', 'created'], ['302', 'redirect'], ['400', 'bad request'], ['401', 'unauthorized'], ['403', 'forbidden'], ['404', 'not found'], ['429', 'rate limited'], ['500', 'server error']],
+    severity: ['ok', 'notice', 'warn', 'high', 'critical'].map((v) => [v, 'severity']),
+    flag: [['idor-success', 'read something not theirs'], ['idor-attempt', 'tried something not theirs'], ['enumeration', 'many ids quickly'], ['burst-errors', 'burst of errors'], ['blocked', 'refused by the proxy']],
+    attack: [['sqli', 'SQL injection'], ['xss', 'cross-site scripting'], ['ssti', 'template injection'], ['lfi', 'path traversal'], ['cmdi', 'command injection'], ['shell', 'reverse / web shell'], ['xxe', 'XML external entity'], ['ssrf', 'server-side request forgery'], ['nosqli', 'NoSQL injection'], ['redirect', 'open redirect'], ['deser', 'deserialization'], ['scanner', 'scanner user agent']],
+    source: [['name', 'gate form'], ['ip-match', 'ip matched to a gate name'], ['session', 'app session'], ['jwt', 'JWT'], ['login', 'app login'], ['ip', 'ip only']],
+    ts: [['-5m', 'last 5 minutes'], ['-15m', 'last 15 minutes'], ['-1h', 'last hour'], ['-6h', 'last 6 hours'], ['-1d', 'last day'], ['-7d', 'last week']],
+  };
+  const valueCache = {};
+  async function dbValues(field) {
+    if (!['student', 'raw', 'ip', 'endpoint', 'owner', 'ua', 'id'].includes(field)) return [];
+    if (valueCache[field] && Date.now() - valueCache[field].at < 30000) return valueCache[field].values;
+    const j = await api('/api/query/values?field=' + field + ($('q-ctf').value ? '&ctf=' + $('q-ctf').value : '')).catch(() => ({ values: [] }));
+    valueCache[field] = { at: Date.now(), values: j.values.map((x) => [x.v, `${x.n} req`]) };
+    return valueCache[field].values;
+  }
+  // ---- highlighting + lint
+  function qRender() {
+    const src = qta.value;
+    const v = Q.validate(src);
+    let toks = [];
+    try { toks = Q.tokenize(src); } catch (e) { toks = []; }
+    const errPos = v.ok ? -1 : v.pos, errEnd = v.ok ? -1 : (v.pos ?? 0) + (v.len || 1);
+    let out = '', i = 0;
+    const push = (text, cls) => { out += cls ? `<span class="${cls}">${esc(text)}</span>` : esc(text); };
+    const classFor = (t) => (t.t === 'ident' ? (Q.FIELDS[t.v.toLowerCase()] ? 'tf' : 'terr') : t.t === 'op' ? 'to' : t.t === 'str' ? 'ts' : t.t === 'num' ? 'tn' : ['AND', 'OR', 'NOT', 'IN'].includes(t.t) ? 'tk' : 'tp');
+    for (const t of toks) {
+      if (t.pos > i) push(src.slice(i, t.pos));
+      const inErr = errPos >= 0 && t.pos < errEnd && t.pos + t.len > errPos;
+      push(src.slice(t.pos, t.pos + t.len), classFor(t) + (inErr ? ' terr' : ''));
+      i = t.pos + t.len;
+    }
+    if (i < src.length) { const rest = src.slice(i); if (errPos >= 0 && errPos >= i) { push(rest.slice(0, errPos - i)); push(rest.slice(errPos - i), 'terr'); } else push(rest); }
+    if (errPos >= 0 && errPos >= src.length) out += '<span class="terr"> </span>';
+    qhl.innerHTML = out + '\n';
+    $('qed').classList.toggle('bad', !v.ok && src.trim() !== '');
+    if (src.trim() === '') { qlint.textContent = 'empty query = every request of the current CTF'; qlint.className = 'qlint'; }
+    else if (v.ok) { qlint.textContent = '✓ valid'; qlint.className = 'qlint ok'; }
+    else { qlint.textContent = `✖ ${v.error}${v.pos != null ? ` (at ${v.pos + 1})` : ''}`; qlint.className = 'qlint err'; }
+    $('q-run').disabled = !v.ok && src.trim() !== '';
+  }
+  // ---- autocomplete
+  const ac = { items: [], idx: 0, replace: null };
+  function contextAt(src, caret) {
+    // what comes before the caret: tokens so far + the partial word being typed
+    let toks = [];
+    try { toks = Q.tokenize(src.slice(0, caret)); } catch { try { toks = Q.tokenize(src.slice(0, caret).replace(/["'][^"']*$/, '')); } catch { toks = []; } }
+    const before = src.slice(0, caret);
+    const partialM = /([A-Za-z_][A-Za-z0-9_-]*|"[^"]*|'[^']*|[-\d.]+)$/.exec(before);
+    const partial = partialM ? partialM[1] : '';
+    const isOpenStr = /^["']/.test(partial);
+    const done = partial && toks.length && toks[toks.length - 1].pos + toks[toks.length - 1].len === caret && !isOpenStr ? toks.slice(0, -1) : toks;
+    const last = done[done.length - 1], prev = done[done.length - 2];
+    let kind, field, op;
+    if (last && last.t === '(' && prev && prev.t === 'IN') { kind = 'value'; field = (done.slice().reverse().find((t) => t.t === 'ident') || {}).v; field = field && field.toLowerCase(); op = 'in'; }
+    else if (!last || ['(', 'AND', 'OR', 'NOT'].includes(last.t)) kind = 'field';
+    else if (last.t === 'ident') { kind = 'op'; field = last.v.toLowerCase(); }
+    else if (last.t === 'op' && prev && prev.t === 'ident') { kind = 'value'; field = prev.v.toLowerCase(); op = last.v; }
+    else if ((last.t === 'IN' || last.t === ',') ) { kind = 'value'; field = (done.slice().reverse().find((t) => t.t === 'ident') || {}).v; field = field && field.toLowerCase(); op = 'in'; }
+    else if (last.t === 'str' || last.t === 'num' || last.t === ')') kind = 'logic';
+    else kind = 'none';
+    return { kind, field, op, partial, isOpenStr, start: caret - partial.length };
+  }
+  async function qSuggest() {
+    const src = qta.value, caret = qta.selectionStart;
+    const c = contextAt(src, caret);
+    let items = [];
+    const p = c.partial.replace(/^["']/, '').toLowerCase();
+    if (c.kind === 'field') items = Object.entries(Q.FIELDS).map(([k, f]) => ({ text: k + ' ', label: k, desc: f.help, tag: f.type }));
+    else if (c.kind === 'op') { const f = Q.FIELDS[c.field]; if (f) items = Q.OPS_BY_TYPE[f.type].map((o) => ({ text: o + (o === 'in' ? ' (' : ' '), label: o, desc: { '=': 'equals', '!=': 'not equal', '>': 'greater', '>=': 'at least', '<': 'less', '<=': 'at most', '~': 'contains', '!~': 'does not contain', in: 'one of a list' }[o], tag: 'op' })); }
+    else if (c.kind === 'value') {
+      const f = Q.FIELDS[c.field]; if (!f) return qAcHide();
+      const hints = VALUE_HINTS[c.field] || [];
+      const live = c.field === 'student' ? (state.stats ? state.stats.students.map((s) => [s.name, `${s.requests} req`]) : []) : c.field === 'endpoint' ? (state.stats ? state.stats.topEndpoints.filter((e) => !e.name.startsWith('/')).map((e) => [e.name, `${e.count} req`]) : []) : [];
+      const fromDb = await dbValues(c.field);
+      const seen = new Set();
+      const merged = [...hints, ...live, ...fromDb].filter(([v]) => (seen.has(v) ? false : seen.add(v)));
+      const quote = (v) => (f.type === 'num' && /^-?\d+(\.\d+)?$/.test(v) ? v : `"${String(v).replace(/"/g, '\\"')}"`);
+      items = merged.map(([v, d]) => ({ text: quote(v) + (c.op === 'in' ? ', ' : ' '), label: quote(v), desc: d, tag: f.type }));
+      if (c.op === 'in') items.push({ text: ') ', label: ')', desc: 'close the list', tag: '' });
+    } else if (c.kind === 'logic') items = [{ text: 'AND ', label: 'AND', desc: 'both conditions', tag: 'logic' }, { text: 'OR ', label: 'OR', desc: 'either condition', tag: 'logic' }];
+    if (p) items = items.filter((it) => it.label.toLowerCase().replace(/^"/, '').startsWith(p) || it.label.toLowerCase().includes(p));
+    if (!items.length) return qAcHide();
+    ac.items = items.slice(0, 40); ac.idx = 0; ac.replace = { start: c.start, end: caret };
+    qac.innerHTML = ac.items.map((it, i) => `<div class="${i === 0 ? 'on' : ''}" data-i="${i}"><b>${esc(it.label)}</b><span>${esc(it.desc || '')}</span><em>${esc(it.tag || '')}</em></div>`).join('');
+    qac.classList.remove('hidden');
+  }
+  function qAcHide() { qac.classList.add('hidden'); ac.items = []; }
+  function qAcAccept(i) {
+    const it = ac.items[i]; if (!it || !ac.replace) return;
+    const src = qta.value, before = src.slice(0, ac.replace.start), after = src.slice(ac.replace.end);
+    qta.value = before + it.text + after.replace(/^\s+/, '');
+    const pos = before.length + it.text.length; qta.setSelectionRange(pos, pos); qta.focus();
+    qRender(); qSuggest();
+  }
+  qac.addEventListener('mousedown', (e) => { const d = e.target.closest('div[data-i]'); if (d) { e.preventDefault(); qAcAccept(Number(d.dataset.i)); } });
+  qta.addEventListener('input', () => { qRender(); qSuggest(); });
+  qta.addEventListener('click', () => qSuggest());
+  qta.addEventListener('scroll', () => { qhl.scrollTop = qta.scrollTop; });
+  qta.addEventListener('blur', () => setTimeout(qAcHide, 150));
+  qta.addEventListener('keydown', (e) => {
+    const open = !qac.classList.contains('hidden');
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); qAcHide(); return runQuery(); }
+    if (!open) { if (e.key === ' ' && e.ctrlKey) { e.preventDefault(); qSuggest(); } return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); ac.idx = (ac.idx + (e.key === 'ArrowDown' ? 1 : -1) + ac.items.length) % ac.items.length; [...qac.children].forEach((d, i) => d.classList.toggle('on', i === ac.idx)); qac.children[ac.idx].scrollIntoView({ block: 'nearest' }); }
+    else if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); qAcAccept(ac.idx); }
+    else if (e.key === 'Escape') { e.preventDefault(); qAcHide(); }
+  });
+  // ---- history (per browser)
+  const HIST_KEY = 'ctfwatch.queries';
+  const loadHist = () => { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; } };
+  function renderHist() { const h = loadHist(); $('q-hist').innerHTML = h.length ? '<span style="border:0;color:var(--faint);cursor:default;padding-left:0">recent:</span>' + h.map((q) => `<span title="${esc(q)}">${esc(q.length > 48 ? q.slice(0, 46) + '…' : q)}</span>`).join('') : ''; }
+  $('q-hist').addEventListener('click', (e) => { const s = e.target.closest('span[title]'); if (s) { qta.value = s.title; qRender(); runQuery(); } });
+  function pushHist(q) { if (!q.trim()) return; try { const h = [q, ...loadHist().filter((x) => x !== q)].slice(0, 12); localStorage.setItem(HIST_KEY, JSON.stringify(h)); } catch {} renderHist(); }
+  renderHist(); qRender();
+
   async function runQuery() {
     $('q-err').textContent = ''; $('q-sql').classList.add('hidden'); $('q-info').textContent = 'running…';
     const j = await api('/api/query', { q: $('q').value, limit: Number($('q-limit').value), ctf: $('q-ctf').value || undefined }).catch((e) => { $('q-err').textContent = e.message; return null; });
     if (!j) { $('q-info').textContent = ''; return; }
+    pushHist($('q').value);
     lastRows = j.rows; $('q-csv').disabled = $('q-json').disabled = !j.rows.length;
     $('q-info').textContent = `${j.count} row${j.count === 1 ? '' : 's'}`; $('q-sql').textContent = j.sql + '   -- params: ' + JSON.stringify(j.params); $('q-sql').classList.remove('hidden');
     $('q-rows').innerHTML = j.rows.map((r) => `<tr class="${['critical', 'high', 'warn'].includes(r.severity) ? 'sev-' + r.severity : ''}"><td>${fmtDate(r.ts)}</td><td>${r.ctf_id}</td><td><a href="/students/${encodeURIComponent(r.student)}" target="_blank">${esc(r.student)}</a></td><td>${esc(r.ip)}</td><td>${esc(r.method)}</td><td title="${esc(r.path)}">${esc(r.path)}</td><td>${esc(r.object_id ?? '')}</td><td>${statusBadge(r.status)}</td><td>${r.size}</td><td>${r.latency}</td><td>${flagsHtml({ flags: r.flags, attacks: [] })}</td><td>${(r.attacks || []).map((a) => `<span class="flag attack">${esc(a.cls)}</span>`).join('')}</td><td title="${esc(r.ua)}">${esc((r.ua || '').slice(0, 30))}</td></tr>`).join('');
   }
   $('q-run').addEventListener('click', runQuery);
-  $('q').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runQuery(); });
-  document.querySelectorAll('.ex').forEach((el) => el.addEventListener('click', () => { $('q').value = el.textContent; runQuery(); }));
+  document.querySelectorAll('.ex').forEach((el) => el.addEventListener('click', () => { $('q').value = el.textContent; qRender(); runQuery(); }));
   $('q-json').addEventListener('click', () => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({ query: $('q').value, exportedAt: new Date().toISOString(), rows: lastRows }, null, 1)], { type: 'application/json' })); a.download = 'ctf-watch-query.json'; a.click();
   });

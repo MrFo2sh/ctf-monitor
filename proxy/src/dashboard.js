@@ -111,6 +111,18 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
 
     // ---- pages (one SPA, the path picks the initial view)
     if (PAGES.has(url) || url.startsWith('/students/')) return page(res, 'app.html');
+    if (url === '/query.js') {
+      // the query parser, shared with the browser for live linting / autocomplete
+      fs.readFile(path.join(__dirname, 'query.js'), (err, data) => {
+        if (err) {
+          res.writeHead(500, SECURITY_HEADERS);
+          return res.end('');
+        }
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', ...SECURITY_HEADERS, 'Cache-Control': 'no-cache' });
+        res.end(data);
+      });
+      return;
+    }
 
     // ---- session
     if (url === '/api/logout' && req.method === 'POST') {
@@ -204,6 +216,19 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
       return json(res, 200, { ok: true, ended: stopCtf() });
     }
 
+    // ---- query: distinct values for autocomplete (whitelisted columns only)
+    if (url === '/api/query/values') {
+      const COLS = { student: 'student', raw: 'raw_name', ip: 'ip', method: 'method', endpoint: 'endpoint', owner: 'owner', source: 'source', severity: 'severity', status: 'status', ua: 'ua', id: 'object_id' };
+      const col = COLS[qs.get('field')];
+      if (!col) return json(res, 200, { values: [] });
+      const cid = scopeCtf(qs.get('ctf'));
+      db.flush();
+      const rows = cid
+        ? db.db.prepare(`SELECT ${col} AS v, COUNT(*) AS n FROM requests WHERE ctf_id = ? AND ${col} IS NOT NULL AND ${col} != '' GROUP BY ${col} ORDER BY n DESC LIMIT 60`).all(cid)
+        : db.db.prepare(`SELECT ${col} AS v, COUNT(*) AS n FROM requests WHERE ${col} IS NOT NULL AND ${col} != '' GROUP BY ${col} ORDER BY n DESC LIMIT 60`).all();
+      return json(res, 200, { values: rows.map((r) => ({ v: String(r.v), n: r.n })) });
+    }
+
     // ---- query
     if (url === '/api/query' && req.method === 'POST') {
       const body = await readJson(req).catch(() => ({}));
@@ -212,7 +237,7 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
         const rows = db.runSql(q.sql, q.params, body.limit || 1000);
         return json(res, 200, { ok: true, rows, count: rows.length, sql: q.sql, params: q.params });
       } catch (err) {
-        return json(res, err instanceof QueryError ? 400 : 500, { error: err.message });
+        return json(res, err instanceof QueryError ? 400 : 500, { error: err.message, pos: err.pos ?? null, len: err.len ?? 1 });
       }
     }
 

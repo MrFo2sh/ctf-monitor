@@ -184,6 +184,13 @@ status in (401, 403) AND ts > "-15m"
 ua ~ "curl" AND size > 500
 ```
 
+The query box behaves like a SIEM search bar: syntax highlighting, live linting (the faulty part
+is underlined and the message says what was expected), and autocompletion that follows what you
+are typing: field names with a description, the operators valid for that field, then values taken
+from the data (students, endpoints, flags, attack classes, methods, status codes, time shortcuts),
+then `AND` / `OR`. Arrow keys to pick, Tab or Enter to accept, Esc to close, Ctrl+Space to reopen,
+Ctrl+Enter to run. Recent queries are kept per browser.
+
 Fields: `ts student raw ip method path endpoint id status size latency severity flag attack owner ua source ctf player`.
 Operators: `= != > >= < <= ~ (contains) !~ in`, logic `AND OR NOT ( )`, times like `"-10m"`,
 `"-2h"`, `"-1d"` or an ISO date. While a CTF is running, queries only see that CTF unless you pick

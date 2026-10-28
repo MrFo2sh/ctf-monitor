@@ -45,6 +45,23 @@ test('LIKE wildcards in user input are escaped', () => {
   assert.deepEqual(q.params, ['%100\\%\\_x%']);
 });
 
+test('validate() reports the position of the problem for the editor', () => {
+  const { validate } = require('../src/query');
+  assert.deepEqual(validate('student = "alice"'), { ok: true });
+  let v = validate('studnt = "alice"');
+  assert.equal(v.ok, false); assert.equal(v.pos, 0); assert.equal(v.len, 6); assert.match(v.error, /unknown field/);
+  v = validate('status ~ 200');
+  assert.equal(v.pos, 7); assert.match(v.error, /cannot be used/);
+  v = validate('student = "alice" status = 200');
+  assert.equal(v.pos, 18); assert.match(v.error, /AND \/ OR/);
+  v = validate('student = "ali');
+  assert.equal(v.pos, 10); assert.match(v.error, /unterminated string/);
+  v = validate('student =');
+  assert.equal(v.pos, 9); assert.match(v.error, /missing value/);
+  v = validate('status >');
+  assert.match(v.error, /missing value/);
+});
+
 test('unknown fields, bad operators and injection attempts are rejected', () => {
   assert.throws(() => parse('password = "x"'), QueryError);
   assert.throws(() => compile('status ~ 200'), QueryError);
