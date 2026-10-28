@@ -23,3 +23,8 @@ Work on this project the factory way:
 
 Hard rules: defensive tooling only. Never log or commit secrets (`logs/`, `data/`, `.env`,
 `certs/` are ignored for that reason).
+
+Verifying the dashboard: `proxy/tools/shot_dash.js` screenshots any view through headless Chrome
+(log in with curl against `/api/login` first, pass the `ctfw_sid` cookie). It never touches the real
+cursor; never drive the owner's mouse or keyboard. Gate pages and fonts are served by the proxy
+under `/__ctfwatch/`; the dashboard serves `/fonts/`.
