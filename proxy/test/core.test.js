@@ -15,6 +15,21 @@ test('masking hides secrets by field name, in URLs and in free text', () => {
   assert.equal(maskText('t=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijklmnop'), 't=<jwt:***>');
 });
 
+test('macFor only ever spawns for a well-formed private IPv4 address', async () => {
+  const { macFor, isPrivateIPv4 } = require('../src/util');
+  assert.equal(isPrivateIPv4('10.0.0.5'), true);
+  assert.equal(isPrivateIPv4('192.168.1.200'), true);
+  assert.equal(isPrivateIPv4('172.31.0.1'), true);
+  assert.equal(isPrivateIPv4('8.8.8.8'), false);
+  assert.equal(isPrivateIPv4('10.0.0.1; rm -rf /'), false);
+  assert.equal(isPrivateIPv4('10.0.0.1 dev eth0'), false);
+  assert.equal(isPrivateIPv4('10.' + 'a'.repeat(5000)), false);
+  assert.equal(isPrivateIPv4('10.0.0'), false);
+  assert.equal(isPrivateIPv4(''), false);
+  assert.equal(await macFor('10.0.0.1; rm -rf /'), null);
+  assert.equal(await macFor('8.8.8.8'), null);
+});
+
 test('jwt and body parsing helpers', () => {
   const payload = Buffer.from(JSON.stringify({ sub: '42', username: 'neo' })).toString('base64url');
   assert.deepEqual(decodeJwt(`Bearer aaa.${payload}.sig`), { sub: '42', username: 'neo' });

@@ -109,10 +109,19 @@ function log(level, ...args) {
 
 // Best-effort MAC address lookup for a LAN ip (only possible when the player is on the same network segment
 // as this machine, i.e. not through zrok). Uses the host's neighbour table; returns null when unknown.
+// Only a well-formed private IPv4 address is ever passed to the `ip` binary (execFile, no shell, so there is
+// no command injection; the strict check removes argument abuse and process spam from spoofed headers).
 const macCache = new Map();
+const MAC_CACHE_MAX = 2000;
+const PRIVATE_V4 = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
+function isPrivateIPv4(ip) {
+  return typeof ip === 'string' && ip.length <= 15 && require('net').isIPv4(ip) && PRIVATE_V4.test(ip);
+}
 function macFor(ip) {
-  if (process.platform !== 'linux' || !/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip)) return Promise.resolve(null);
+  if (process.platform !== 'linux' || !isPrivateIPv4(ip)) return Promise.resolve(null);
   if (macCache.has(ip)) return Promise.resolve(macCache.get(ip));
+  if (macCache.size >= MAC_CACHE_MAX) macCache.delete(macCache.keys().next().value);
+  macCache.set(ip, null); // reserve the slot: concurrent requests for the same ip spawn one lookup only
   return new Promise((resolve) => {
     try {
       require('child_process').execFile('ip', ['neigh', 'show', ip], { timeout: 1500 }, (err, out) => {
@@ -127,4 +136,4 @@ function macFor(ip) {
   });
 }
 
-module.exports = { get, firstOf, shortHash, parseCookies, parseSetCookies, decodeJwt, parseBody, clientIp, macFor, nowIso, log };
+module.exports = { get, firstOf, shortHash, parseCookies, parseSetCookies, decodeJwt, parseBody, clientIp, macFor, isPrivateIPv4, nowIso, log };

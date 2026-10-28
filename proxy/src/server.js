@@ -163,7 +163,7 @@ function playerIdFor(who, ip, ts) {
   if (!identities.length) return null; // anonymous ip-only rows are not players yet
   const id = db.playerFor(identities, who.name, ts);
   playerCache.set(key, { id, ips: new Set(ip ? [ip] : []) });
-  if (ip) macFor(ip).then((mac) => mac && db.stmts.upsertIdentity.run(id, 'mac', mac, db.ctfId, ts, ts)).catch(() => {});
+  if (ip && !admin.isBlocked(who.name, ip)) macFor(ip).then((mac) => mac && db.stmts.upsertIdentity.run(id, 'mac', mac, db.ctfId, ts, ts)).catch(() => {});
   return id;
 }
 
