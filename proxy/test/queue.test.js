@@ -93,3 +93,17 @@ test('waiting page event stream: open streams get the decision pushed instantly'
   g.handle({ method: 'GET', url: '/__ctfwatch/status', headers: { cookie: ck }, socket: {}, on() {} }, s);
   assert.match(s.body, /"status":"approved"/);
 });
+
+test('clear() forgets every decision and the next visit waits again', () => {
+  const { db, approvals, g, cookieFor } = setup({ enabled: true, strict: false, queue: true });
+  approvals.enqueue('Gohary', { ip: '1.2.3.4' });
+  approvals.approve(['Gohary'], 'admin_x');
+  assert.equal(g.handle(nav(cookieFor('Gohary')), mkRes()), false, 'approved: the page is proxied');
+  assert.equal(approvals.clear(), 1);
+  assert.deepEqual(db.get('gate_queue', null), {}, 'persisted as empty');
+  const r = mkRes();
+  assert.equal(g.handle(nav(cookieFor('Gohary')), r), true, 'back in the queue: the waiting page');
+  assert.equal(approvals.status('Gohary'), 'pending');
+  assert.equal(approvals.clear(), 1);
+  assert.equal(approvals.clear(), 0, 'nothing left to clear');
+});

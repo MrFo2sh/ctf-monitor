@@ -350,6 +350,11 @@ function createDashboard({ port, bind, store, admin, auth, db, replay, playgroun
     if (url.startsWith('/api/queue/') && req.method === 'POST') {
       if (adminOnly()) return;
       const body = await readJson(req).catch(() => ({}));
+      if (url === '/api/queue/clear') {
+        const removed = approvals.clear();
+        log('info', `admin ${user.username} reset the queue (${removed} decision(s) dropped)`);
+        return json(res, 200, { ok: true, removed });
+      }
       const names = [].concat(body.names || body.name || []).map(String);
       if (!names.length) return json(res, 400, { error: 'names required' });
       try {

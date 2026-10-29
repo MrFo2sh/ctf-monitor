@@ -75,6 +75,16 @@ class Approvals {
   reset(names) {
     return this.decide(names, 'pending');
   }
+  /** Forget every decision: the next visit of any name goes back to pending. Returns how many were dropped. */
+  clear() {
+    const n = this.items.size;
+    if (!n) return 0;
+    const names = [...this.items.keys()];
+    this.items.clear();
+    this.save(names);
+    log('info', `queue: cleared ${n} decision(s); everyone is re-admitted through the queue`);
+    return n;
+  }
   remove(names) {
     const gone = [].concat(names || []).filter((x) => this.items.delete(x));
     if (gone.length) this.save(gone);

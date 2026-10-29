@@ -433,6 +433,7 @@
     <span class="count" id="qu-selinfo"></span>
     <button class="primary small admin-only" id="qu-approve-sel">✅ Approve selected</button>
     <button class="small danger admin-only" id="qu-block-sel">⛔ Block selected</button>
+    <button class="small admin-only" id="qu-clear" title="Forget every decision: everyone goes through the queue again on their next page load">⟲ Reset queue</button>
     <button class="small" data-open="/queue">↗</button>
   </div>
   <div id="qu-off" class="empty hidden">The queue is switched off (Gate tab): students go straight in after the form.</div>
@@ -481,7 +482,7 @@
       <h3>How it behaves</h3>
       <ul class="notes">
         <li><b>Strict</b> (default): nothing reaches the CTF without the form. A browser gets the form; curl, scripts and crawlers from an unknown address get a refusal that names the required fields, and the attempt is recorded. Tools from an address where exactly one student already filled the form pass as that student; on a shared address they must send the browser's cookie. Switched off, only browser page loads are asked and tools pass.</li>
-        <li><b>Queue</b> (default): after the form the student sees a waiting page and gets in the instant you approve them in the Queue tab. Blocking from the queue also blocks them at the proxy.</li>
+        <li><b>Queue</b> (default): after the form the student sees a waiting page and gets in the instant you approve them in the Queue tab. Blocking from the queue also blocks them at the proxy. Decisions last for the event: a new CTF record, or switching the queue on, starts an empty queue, and ⟲ Reset queue in the Queue tab clears it by hand.</li>
         <li>The username goes into a signed cookie (30 days). Requests from the same IP without the cookie are matched to it, unless two students share that IP.</li>
         <li>"Ask to rename" on a student rejects their name: their browser shows this form again and their other requests are refused until they answer.</li>
         <li>Switching the gate off lets everyone straight through; students are then identified by the app's login or their IP.</li>
@@ -1190,6 +1191,7 @@
   $('qu-head').addEventListener('change', (e) => { if (e.target.id === 'qu-all') { for (const cb of document.querySelectorAll('.qu-cb')) { cb.checked = e.target.checked; e.target.checked ? qu.sel.add(cb.dataset.name) : qu.sel.delete(cb.dataset.name); } renderQueue(); } });
   $('qu-rows').addEventListener('change', (e) => { const cb = e.target.closest('.qu-cb'); if (cb) { cb.checked ? qu.sel.add(cb.dataset.name) : qu.sel.delete(cb.dataset.name); $('qu-selinfo').textContent = qu.sel.size ? `${qu.sel.size} selected` : ''; $('qu-approve-sel').disabled = $('qu-block-sel').disabled = !qu.sel.size; } });
   $('qu-rows').addEventListener('click', async (e) => { const b = e.target.closest('button.qu-act'); if (!b) return; if (b.dataset.act === 'block' && !confirm(`Block "${b.dataset.name}"? They will not be able to reach the CTF.`)) return; if (b.dataset.act === 'approve-decoy') return tryApi('/api/queue/approve', { names: [b.dataset.name], decoy: true }); await tryApi('/api/queue/' + b.dataset.act, { names: [b.dataset.name] }); });
+  $('qu-clear').addEventListener('click', async () => { if (confirm('Reset the queue?\n\nEvery approval and block is forgotten. Students already playing see the waiting page on their next page load until you approve them again.')) { await tryApi('/api/queue/clear', {}); qu.sel.clear(); loadQueue(); } });
   $('qu-approve-sel').addEventListener('click', async () => { if (qu.sel.size) { await tryApi('/api/queue/approve', { names: [...qu.sel] }); qu.sel.clear(); } });
   $('qu-block-sel').addEventListener('click', async () => { if (qu.sel.size && confirm(`Block ${qu.sel.size} student(s)?`)) { await tryApi('/api/queue/block', { names: [...qu.sel] }); qu.sel.clear(); } });
 

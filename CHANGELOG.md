@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.3.5 - 2026-10-29
+- Queue decisions last for one event. Starting a new CTF record or switching the queue on clears every approval and block, so students go through the queue again; before, an approval from an earlier event let the same name straight in. The Queue tab has a "⟲ Reset queue" button for doing it by hand (`POST /api/queue/clear`).
+
 ## 1.3.4 - 2026-10-28
 - Query editor: autocomplete and the partial-word detection now work after a quoted value (`student = "Fo2sh" and status > 200` offers AND/OR, fields, operators and values at every step). The context logic moved into the shared query module (`contextAt`) with a test. Ctrl+Space always opens suggestions; the hint line says so.
 

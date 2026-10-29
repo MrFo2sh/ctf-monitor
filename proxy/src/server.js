@@ -83,8 +83,11 @@ function queueDecide(names, status, by) {
   return changed;
 }
 function setGateConfig(raw) {
+  const hadQueue = gateConfig.queue;
   gateConfig = normalizeConfig(raw);
   db.set('gate_config', gateConfig);
+  // switching the queue on means "everyone waits for me again": old approvals do not carry over
+  if (!hadQueue && gateConfig.queue) approvals.clear();
   log('info', `gate config saved: ${gateConfig.enabled ? 'on' : 'off'}, fields: ${gateConfig.fields.map((f) => f.key).join(', ')}`);
   return gateConfig;
 }
@@ -294,6 +297,8 @@ function newCtf(name) {
   db.endCtf(db.ctfId);
   const c = db.openCtf(name || undefined);
   resetLive();
+  // a new event starts with an empty admission queue: last event's approvals do not carry over
+  approvals.clear();
   log('info', `switched to CTF #${c.id} "${c.name}"`);
   return c;
 }
